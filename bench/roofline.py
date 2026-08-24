@@ -32,12 +32,17 @@ import math
 import statistics
 import threading
 import time
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass
 from pathlib import Path
 
 import torch
 
-from fa.ref.naive import SdpaUnavailable, chunked_attention, naive_attention, sdpa_attention, sdpa_report
+from fa.ref.naive import (
+    chunked_attention,
+    naive_attention,
+    sdpa_attention,
+    sdpa_report,
+)
 
 REPO = Path(__file__).resolve().parents[1]
 RESULTS = REPO / "results"
@@ -526,7 +531,8 @@ def plot(rows: list[Row]) -> Path:
                 label=f"{impl} (N={min(r.N for r in pts)}..{max(r.N for r in pts)}, causal F+T)",
                 alpha=0.85, edgecolors="white", linewidths=0.5,
             )
-        ax.set_xscale("log"); ax.set_yscale("log")
+        ax.set_xscale("log")
+        ax.set_yscale("log")
         ax.set_xlabel("arithmetic intensity  (analytic FLOP / analytic HBM byte)")
         ax.set_ylabel("achieved GFLOP/s (executed FLOPs / measured median latency)")
         ax.set_title(f"{device.upper()} / {dt} -- Apple M4, measured {hw['measured_at']}")
