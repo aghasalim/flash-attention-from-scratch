@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import csv
 import json
+import re
 import sys
 from pathlib import Path
 
@@ -27,7 +28,16 @@ DOCS = ["README.md", "notes/paper.md", "notes/00-roofline.md"]
 def load():
     hw = json.loads((ROOT / "hardware.json").read_text())
     rows = list(csv.DictReader((ROOT / "results" / "roofline.csv").open()))
-    return hw, rows
+    fus_path = ROOT / "results" / "fusion.csv"
+    fus = list(csv.DictReader(fus_path.open())) if fus_path.exists() else []
+    return hw, rows, fus
+
+
+def fusion(fus, impl, n, field="latency_ms_median"):
+    for r in fus:
+        if r["impl"] == impl and r["N"] == str(n) and r["status"] == "ok":
+            return float(r[field])
+    return None
 
 
 def sweep(rows, device, impl, n, causal="False", field="latency_ms_median"):
@@ -38,7 +48,7 @@ def sweep(rows, device, impl, n, causal="False", field="latency_ms_median"):
     return None
 
 
-def claims(hw, rows):
+def claims(hw, rows, fus):
     """(label, value, format, files-that-must-agree). Recomputed from source."""
     bw = hw["bandwidth"]
     dt = hw["dtypes"]
@@ -64,6 +74,32 @@ def claims(hw, rows):
         ("AI fused @4096", ai_fused, f"{ai_fused:.2f}", DOCS),
         ("naive/chunked @4096", naive4 / chunk4, f"{naive4 / chunk4:.2f}", DOCS),
     ]
+
+    # bench/fusion.py -- the CPU fusion measurement. README quotes the table and
+    # the speedups; those are the numbers most likely to be misread as a
+    # FlashAttention result, so they get checked hardest.
+    for n in (256, 512, 1024, 2048, 4096):
+        e = fusion(fus, "naive-eager", n)
+        f_ = fusion(fus, "naive-compiled", n)
+        if e is None or f_ is None:
+            continue
+        out += [
+            (f"fusion eager N={n}", e, f"{e:.2f}", ["README.md"]),
+            (f"fusion compiled N={n}", f_, f"{f_:.2f}", ["README.md"]),
+        ]
+        # Read the speedup off the CSV rather than recomputing it as a ratio of
+        # medians. bench/fusion.py takes the ratio within each repeat and then the
+        # median of those, which is the honest statistic: it reflects how unstable
+        # the ratio itself is. The two differ (2.95 vs 3.01 at N=1024) and the
+        # per-repeat form is the one the README quotes.
+        sp = next((r for r in fus if r["impl"] == "fusion-speedup"
+                   and r["N"] == str(n) and r["status"] == "ok"), None)
+        if sp:
+            for key, lbl in (("speedup_median", "speedup"),
+                             ("speedup_min", "speedup low"),
+                             ("speedup_max", "speedup high")):
+                val = float(sp[key])
+                out.append((f"fusion {lbl} N={n}", val, f"{val:.2f}", ["README.md"]))
     return [c for c in out if c[1] is not None]
 
 
@@ -77,16 +113,31 @@ STALE = {
 
 
 def main() -> int:
-    hw, rows = load()
+    hw, rows, fus = load()
     failures = []
     checked = 0
 
-    for label, _value, text, files in claims(hw, rows):
+    for label, _value, text, files in claims(hw, rows, fus):
+        # Accept any rendering that reads back to the same number -- prose writes
+        # "2048 FLOP/byte" where a table writes "2048.00" -- but ONLY forms that
+        # keep at least 3 significant characters, and only on a number boundary.
+        #
+        # An earlier version also generated the %.0f form, which for 9.99 is "10",
+        # and "10" occurs inside "1024" and "10 GPU cores". That made the check
+        # pass against deliberately corrupted data. Caught by negative-testing the
+        # checker itself, which is the only reason to write a negative test.
+        forms = {text, text.rstrip("0").rstrip(".")}
+        forms = {x for x in forms if len(x.replace(".", "").replace("-", "")) >= 3}
+        if not forms:
+            forms = {text}
         for f in files:
             body = (ROOT / f).read_text()
             checked += 1
-            if text not in body:
-                failures.append(f"{f}: {label} should read {text}, not found")
+            # (?<![\d.]) / (?![\d]) so 3.86 does not match inside 13.865
+            hit = any(re.search(r"(?<![\d.])" + re.escape(x) + r"(?!\d)", body) for x in sorted(forms))
+            if not hit:
+                failures.append(
+                    f"{f}: {label} should read {text} (or an equivalent form), not found")
 
     # A stale value is only a failure if it is presented as current. The logbook and
     # the 'what I got wrong' sections quote old numbers on purpose, as history.
