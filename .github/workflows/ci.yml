@@ -36,3 +36,10 @@ jobs:
 
       - name: Test
         run: python -m pytest -q
+
+      # Prose drifts when the *data* is regenerated, not when the prose is edited,
+      # so this runs on every push. It caught the README asserting a ridge point of
+      # 32.92 hours after hardware.json had moved it to 30.91 -- which had flipped
+      # the roofline verdict. See notes/LOGBOOK.md, 2026-08-24.
+      - name: Check quoted numbers against their source data
+        run: python scripts/check_numbers.py
