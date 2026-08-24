@@ -85,6 +85,15 @@ reports a range rather than a lone median.
 
 ## Results
 
+![attention roofline measured on Apple M4](results/roofline.png)
+
+Both baselines sit left of the ridge on MPS, which is the claim this repo opened
+with, measured rather than quoted. The fused ideal is not plotted as a point
+because nothing executes it yet — its arithmetic intensity is analytic, 2048
+FLOP/byte, and it lands 62x right of the ridge. The right-hand panel is the CPU
+control. A CUDA roofline is `not measured on this hardware`, which the figure
+says in its own title rather than leaving to the caption.
+
 <!-- BENCH:START -->
 No kernel yet, so there is no kernel row. What exists is the baseline sweep the kernel
 will eventually be measured against — `results/roofline.csv` (92 rows, 834.6 s),
