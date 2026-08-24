@@ -1,254 +1,258 @@
 # flash-attention-from-scratch
 
-A fused, IO-aware attention kernel, built from the ground up — online softmax on paper, then Triton, then raw CUDA C++ with `mma` intrinsics — to be benchmarked against `torch.nn.functional.scaled_dot_product_attention` and the official `flash-attn` package.
+A from-scratch implementation of IO-aware attention, built to check whether the
+standard claim about it — that attention is bound by memory bandwidth rather than
+arithmetic — actually holds on hardware I can measure.
 
-> **Status: waves 0–1 done and measured. Waves 2–5 are blocked on hardware.**
-> The math, the reference implementations, the test suite, and the roofline analysis
-> are built and their numbers are real, taken on this machine and reproducible from
-> `results/`. There is no kernel yet: Triton has no macOS wheel and there is no CUDA
-> device here, so tasks 03 and 05–10 cannot run until I have an NVIDIA GPU. Nothing
-> in this repo is estimated, and every CUDA-only quantity says so in those words
-> rather than borrowing a number from the paper.
+**Current state.** The mathematics, the reference implementations, the test suite
+and the empirical analysis are complete and reproducible. The Triton and CUDA
+kernels are not written. Triton publishes no macOS wheel and this machine has no
+NVIDIA GPU, so six of the twelve planned tasks are blocked on hardware rather than
+on effort. I have not written kernels I cannot compile or test; the repository
+holds no unverified kernel code, and every quantity that could not be measured
+here says so explicitly rather than being estimated or taken from the literature.
 
 ---
 
-## What this is
+## 1. The question
 
-The claim I keep reading is that attention is memory-bandwidth-bound, not
-compute-bound. A 4096-token forward pass is supposed to spend most of its
-wall-clock time pushing a 4096×4096 score matrix out to HBM and pulling it back,
-with the matmuls nearly free by comparison. That's the whole thesis of
-FlashAttention, and I don't want to take it on faith — I want to write the naive
-version, profile it on a specific card, and see the number myself. Task 01 is
-exactly that and nothing else.
+Attention computes `S = QKᵀ/√d`, `P = softmax(S)`, `O = PV`. The received account is
+that the cost is dominated not by the two matrix multiplications but by writing the
+`B·H·N²` score matrix out to memory and reading it back — an intermediate the caller
+never asked for. Fusing the softmax into the matmuls, so that `S` and `P` never leave
+on-chip memory, is supposed to remove that traffic entirely.
 
-The other reason for doing it this way: I want one project where I understand
-every layer instead of one. The math (why streaming softmax is exact, not an
-approximation), the algorithm (why tiling changes IO complexity from Θ(N²) to
-Θ(N²d²/M) while leaving the FLOP count alone), and the hardware (why a given
-`num_stages` wins on one card and stops winning once the block outgrows shared
-memory). Plenty of people stop at the first layer.
+The ratio of score traffic to parameter traffic is `N/D`. At `D = 64` the scores
+overtake `Q`, `K`, `V` and `O` combined at `N = 64`, and by `N = 4096` they are 32×
+everything else. The argument is clearly right in the limit. What I wanted to know
+was whether it is measurable, and by how much, on a machine I own — and it turned
+out the answer is less clean than I expected.
 
-## How it's structured
+## 2. What I found
 
-The work is split into twelve self-contained task specs in [`prompts/`](prompts/),
-arranged into waves — some run in parallel, some have to run alone. The
-dependency graph and the file-ownership rules that make the parallel waves safe
-are in [`AGENTS.md`](AGENTS.md).
+**Fusion is worth roughly 3× on this hardware, and it takes achieved throughput
+from 22% of the CPU's measured fp32 peak to 66–68%.** This is the central result
+and it is measured rather than modelled. Triton will not install here, but
+`torch.compile`'s inductor backend performs genuine kernel fusion on the CPU, which
+exercises the same mechanism — keeping intermediates off the memory bus — at a
+different scale.
 
-| wave | tasks | why |
-|---|---|---|
-| 0 | 00 bootstrap | scaffold + hardware fingerprint everything else reads |
-| 1 | 01 roofline · 02 online softmax · 04 test harness | independent, no kernel yet |
-| 2 | 03 Triton forward | the core; everything below extends it |
-| 3 | 05 backward · 06 causal/masks · 07 autotune+bench | disjoint files, parallel |
-| 4 | 08 GQA/varlen/dropout · 09 flash-decoding · 10 CUDA C++ | parallel |
-| 5 | 11 write-up + ablations | reads every result file |
+| N | eager | fused (`torch.compile`) | speedup | across repeats |
+|---:|---:|---:|---:|---|
+| 256 | 0.58 ms | 0.35 ms | 1.70× | 1.60–1.74 |
+| 512 | 2.92 ms | 1.18 ms | 2.48× | 2.46–2.50 |
+| 1024 | 12.44 ms | 4.21 ms | 3.01× | 2.27–3.94 |
+| 2048 | 44.88 ms | 14.52 ms | 3.09× | 2.88–3.19 |
+| 4096 | 176.05 ms | 60.20 ms | 2.92× | 2.39–3.39 |
 
-Realistic pacing, doing it properly: waves 0–1 a week, wave 2 two or three weeks,
-wave 3 a month, wave 4 two or three months (the CUDA C++ path is a project on its
-own), wave 5 a week.
+CPU, fp32, `B=2 H=8 D=64`, five independent repeats with the variants interleaved;
+outputs agree with eager to 5.5e-07. Source: `results/fusion.csv`.
 
-## Ground rules
+I first ran this once per configuration and read a speedup that climbed steadily to
+4.47× at `N = 2048`, which is the shape the bandwidth argument predicts and which I
+was pleased to see. It does not survive repetition. With five repeats the ratio
+rises to about 3× by `N = 512` and then flattens, and the `N = 1024` interval alone
+spans 2.27–3.94. The benefit is real and substantial; the trend I wanted to read
+into it was noise. What the data does support is the level shift in throughput,
+which is large and stable across every size.
 
-These are in [`AGENTS.md`](AGENTS.md) in full. The ones that matter most:
+**Tiling on its own buys nothing, and I had assumed the opposite.** Chunked
+attention — looping over key/value blocks without fusing — is *not* faster than the
+naive implementation at any sequence length, on either device I tested. It is
+0.56–0.59× on the GPU and level with naive on the CPU. Its measured arithmetic
+intensity is 29.47 against naive's 31.51, so tiling moves intensity in the wrong
+direction, because it re-reads `Q` and the accumulator once per tile while moving
+the same score traffic. Tiling converts an out-of-memory failure into a slow
+program; it is a prerequisite for fusion, not a substitute for it. That distinction
+is the single most useful thing I learned here.
 
-1. **Never fix a failing test by loosening the tolerance.** If fp16 output
-   disagrees with the fp64 reference past the bar, the kernel is wrong.
-2. **The correctness bar is relative.** The kernel's error against fp64 has to be
-   no worse than naive fp16 attention's error against the same fp64 reference.
-   Absolute tolerances either pass broken kernels or fail correct ones.
-3. **No benchmark number that didn't come out of `bench/`.** Not estimates, not
-   numbers from the paper, not "roughly 2× based on the algorithm."
-4. **Every kernel change gets a dated logbook entry** with the before/after.
-5. **All accumulators are fp32.** Inputs can be fp16/bf16; `acc`, `m_i`, `l_i`,
-   `D` are fp32, always.
-6. **If it can't be measured on the card I have, it says "not measured on this
-   hardware."** No extrapolating to an H100 I don't own.
+**The memory wall is a cliff, not a slope.** Naive attention tracks `N²` exactly
+while it fits — successive doublings cost 3.84× and 4.04× — and then at `N = 4096`
+it goes from 174 ms to 46.5 s, a 267× jump for 4× the work, as 8 GiB of score
+traffic stops fitting the 17.76 GiB working set. At that point chunked attention —
+slower at every smaller size — is 37.95× faster, and naive fails outright 1024
+tokens later. Chunked, on the same sweep, reaches `N = 16384`.
 
-## Hardware
+**The roofline does not settle the memory-bound question on this machine, and I
+initially claimed that it did.** The ridge point is 30.91 FLOP/byte at the median,
+but peak compute swings between 1937 and 3793 GFLOP/s with thermal state, which
+places the ridge anywhere in 20.08–40.55. Naive attention's arithmetic intensity is
+31.51 — inside that band. It sits on the knee, and which side of it you measure
+depends on how warm the laptop is. The first version of this file asserted
+"memory-bound, measured" on the strength of a 4% margin against a quantity whose own
+uncertainty is ±35%.
 
-Measured by `scripts/env.py`, which writes `HARDWARE.md` and `hardware.json`. It has
-a full NVIDIA path; on this machine that path finds nothing and says so.
+What survives the noise is the comparison that was always the important one: a fused
+implementation sits at 2048 FLOP/byte, 66× the ridge, and no amount of thermal drift
+moves that. The direct measurements above — the fusion speedup, the cliff, the OOM —
+do not depend on a ridge point at all.
 
-- **Device:** Apple M4, 10 GPU cores, 25.77 GB unified memory (macOS 26.5.2, arm64)
-- **Measured copy-kernel bandwidth:** 95.9 GB/s MPS · 101.3 GB/s CPU (1 GiB fp16 buffers, 10 warmup + median of 20)
-- **Measured matmul throughput** (FLOPs = 2·M·N·K, M=N=K=8192): MPS fp16 2963.5 GFLOP/s · bf16 3014.7 · fp32 2542.8; CPU fp32 1738.3, fp64 463.0
-- **CUDA:** none. HBM bandwidth, tensor-core TFLOP/s, SM count, shared memory, `cp.async`/FP8/TMA/WGMMA flags — all `not measured on this hardware (no CUDA device; developed on Apple M4)`
-- **Triton:** not installed; no macOS wheel exists, so it lives in the `[gpu]` extra
-- Python 3.14.4 · torch 2.13.0
+**The online-softmax recurrence is exact, and I proved it rather than assuming it.**
+Verified to 7.216e-16 against direct computation in fp64, across block sizes that do
+not evenly divide the sequence, causal and non-causal. Because the algorithm is
+exact, any discrepancy a kernel later shows must be an arithmetic defect, never the
+algorithm — which considerably narrows the search when debugging one.
 
-Two constraints this turned up that shaped later tasks: MPS has no float64 at all, so
-the fp64 reference runs on CPU; and run-to-run spread on the same fp16 matmul is large
-and thermal — 1937–3793 GFLOP/s inside one run, and medians of 3142.6 and 2963.5 an
-hour apart. That spread is big enough to move the ridge point across a conclusion, so
-every benchmark here reports a range rather than a lone median.
+**Keeping accumulators in fp32 is worth a factor of 3297.** At `N = 8192`, fp16
+accumulation gives 1.568e-04 maximum absolute error against 4.755e-08 for fp32, and
+the denominator is 8202× worse. The relative error reaches 1.000 from `N = 1024`
+upward, meaning small probabilities are returned as literal zero. Separately,
+zero-filling a short trailing block instead of masking it with −∞ produces
+probabilities summing to 0.430484 rather than 1.
 
-## Results
+## 3. What is measured, and what is not
 
-![attention roofline measured on Apple M4](results/roofline.png)
+Hardware fingerprint via `scripts/env.py`, which has a full NVIDIA code path that
+finds nothing here and says so.
 
-![latency scaling and the tiling crossover](results/latency-scaling.png)
+| | |
+|---|---|
+| Device | Apple M4, 10 GPU cores, 25.77 GB unified, macOS 26.5.2 |
+| Copy-kernel bandwidth | 95.86 GB/s (MPS) · 101.29 GB/s (CPU) |
+| Matmul throughput | 2963.5 GFLOP/s fp16 · 3014.7 bf16 · 2542.8 fp32 (MPS); 1738.3 fp32 · 463.0 fp64 (CPU) |
+| Ridge point | 30.91 FLOP/byte median, 20.08–40.55 across thermal state |
+| CUDA | none — HBM bandwidth, tensor-core throughput, SM count, `cp.async`/FP8/TMA all `not measured on this hardware` |
+| Triton | not installable; no darwin wheel exists |
 
-The crossover is the argument for tiling, and it is not a speed argument. Chunked
-attention is *slower* than naive at every sequence length that fits in memory,
-then roughly 38x faster at the first one that does not — because naive is no
-longer computing, it is failing to allocate.
+Two constraints this surfaced that shaped everything downstream: MPS provides no
+float64 at all, so the fp64 reference runs on the CPU; and run-to-run spread on an
+identical matmul is large enough to move a conclusion, so every figure here is a
+median reported with its range.
 
-![analytic memory traffic and how each configuration ended](results/memory.png)
+Quantities requiring an NVIDIA GPU — the naive-versus-FlashAttention ratio, `exp2`
+against `exp`, block-size and pipeline-depth sweeps, shared-memory swizzling,
+`cp.async`, Flash-Decoding, GQA cache savings — are absent rather than estimated.
+The full ablation table, including every cell marked unmeasurable, is in
+[`notes/paper.md`](notes/paper.md).
 
-![the OOM ladder](results/oom-ladder.png)
-
-The score matrix is N² elements; naive materialises it and chunked never does.
-That is a memory-model claim before it is a performance one, so the ladder walks N
-upward until allocation actually fails, rather than asserting where it would.
-
-Both baselines sit left of the ridge on MPS, which is the claim this repo opened
-with, measured rather than quoted. The fused ideal is not plotted as a point
-because nothing executes it yet — its arithmetic intensity is analytic, 2048
-FLOP/byte, and it lands 62x right of the ridge. The right-hand panel is the CPU
-control. A CUDA roofline is `not measured on this hardware`, which the figure
-says in its own title rather than leaving to the caption.
-
-<!-- BENCH:START -->
-No kernel yet, so there is no kernel row. What exists is the baseline sweep the kernel
-will eventually be measured against — `results/roofline.csv` (92 rows, 834.6 s),
-plotted in `results/roofline.png`.
-
-**Is attention memory-bound here?** Not decisively — and that is the honest answer
-rather than the one I set out to get. The ridge point on MPS fp16 is **30.91
-FLOP/byte** median (2963.5 GFLOP/s ÷ 95.86 GB/s), but thermal spread on peak compute
-puts it anywhere in **20.08–40.55**. Measured arithmetic intensity at `N=4096`,
-`B=4 H=32 D=64`:
-
-| implementation | AI (FLOP/byte) | verdict |
-|---|---:|---|
-| naive | 31.51 | inside the ridge band — indeterminate |
-| chunked | 29.47 | inside the ridge band — indeterminate |
-| fused ideal (S, P never stored) | 2048.00 | **66× the ridge — decisively compute-bound** |
-
-Naive sits *on* the knee of the roofline, and which side it lands on depends on how
-warm the laptop is. What survives the noise is the fused comparison at 66×, and the
-two direct measurements below, which do not depend on a ridge point at all.
-
-**Latency, MPS fp16, non-causal**, median from the CSV:
-
-| seq_len | naive | chunked | naive ÷ chunked |
-|--------:|------:|--------:|----------------:|
-| 512 | 11.2 ms | 20.1 ms | 0.56× |
-| 1024 | 43.1 ms | 74.7 ms | 0.58× |
-| 2048 | 174.2 ms | 294.6 ms | 0.59× |
-| 4096 | 46545.5 ms | 1226.6 ms | **37.95×** |
-| 8192 | OOM | 4785.5 ms | — |
-| 16384 | OOM | 32669.5 ms | — |
-
-Chunking is *slower* than naive at every size that fits, then 38× faster the moment
-it stops fitting. The naive-vs-FlashAttention ratio, which is the number this table
-actually wants, is `not measured on this hardware (no CUDA device; developed on Apple M4)`.
-
-Full derivations, the ridge-point argument, and the OOM prediction are in
-[`notes/00-roofline.md`](notes/00-roofline.md). The paper-style write-up, with the
-ablation table and an honest account of what the roofline does and does not settle,
-is [`notes/paper.md`](notes/paper.md).
-<!-- BENCH:END -->
-
-## Feature coverage
-
-Nothing kernel-side is ticked, because nothing kernel-side can run here.
-
-**Done and measured (waves 0–1):**
-
-- [x] Hardware fingerprint with measured bandwidth/throughput, honest nulls for absent hardware
-- [x] Online-softmax derivation + induction proof of exactness, and a NumPy reference shaped like the kernel
-- [x] fp64 ground truth and a 500-test correctness suite (relative bar, adversarial, prime lengths, four invariants)
-- [x] Naive / chunked / backend-forced-SDPA baselines
-- [x] Roofline analysis: FLOP and byte derivations, measured ridge point, measured OOM threshold
-
-**Blocked on an NVIDIA GPU (waves 2–5):**
-
-- [ ] Forward, non-causal, fp16/bf16, head_dim ∈ {32, 64, 128}
-- [ ] Backward via recomputation from stored logsumexp
-- [ ] Causal masking with block skipping
-- [ ] Sliding-window / local attention
-- [ ] ALiBi and arbitrary additive bias
-- [ ] MQA / GQA (grouped KV heads, no materialization)
-- [ ] Variable-length packed batches (`cu_seqlens`)
-- [ ] Dropout with fwd/bwd-consistent Philox RNG
-- [ ] Flash-Decoding (split-KV) for batch-1 long-context inference
-- [ ] Paged KV cache with block-table indirection
-- [ ] CUDA C++ implementation with explicit `mma` + `cp.async`
-
-## Planned layout
-
-None of this exists yet. It's what the task specs build.
-
-```
-fa/
-  ref/            fp64 reference attention, streaming-softmax reference (NumPy)
-  triton/         fwd.py, bwd.py, autotune configs, the autograd.Function wrapper
-  cuda/           attention.cu -- wmma/mma path, cp.async double buffering, swizzled smem
-  ops/            public API: fa.ops.attention(q, k, v, causal=..., window=...)
-tests/            correctness suite -- fp64 comparison, gradcheck, adversarial inputs
-bench/            latency/memory/roofline harness, ncu wrappers
-notes/            the derivations and the logbook
-results/          generated. csv + plots. checked in so the README tables reproduce.
-prompts/          the task specs that build all of the above (see AGENTS.md)
-```
-
-## What I got wrong
-
-Real ones, from [`notes/LOGBOOK.md`](notes/LOGBOOK.md). More will land as the kernel does.
-
-**1. My OOM prediction was 19% off, and widening the bar would have hidden the reason.**
-The textbook model says naive attention dies when the two `N²` tensors (`S` and `P`)
-fill memory, which predicted `N≈6103`. It actually died at 5120. The failure implies
-~3.16 concurrent `N²` tensors, not 2 — the third is the `masked_fill` allocation held
-alongside them. With three the prediction is `N≈4983`, off by −2.7%. The byte model
-under-counts any real implementation by exactly the intermediates the framework
-materialises.
-
-**2. I assumed tiling was the win. It is not — it moved arithmetic intensity the wrong way.**
-Chunked attention is 0.56–0.59× the speed of naive at every `N` that fits, and its
-measured AI is 29.47 against naive's 31.51. Tiling buys `Θ(N²) → Θ(N·BLOCK)` memory
-and nothing else; the bytes are unchanged. That pair of numbers is the argument for
-fusion, and I had the causality backwards until I measured it.
-
-**3. I claimed attention was memory-bound here before checking the error bar.**
-The first version of this README said "Yes, measured" with a ridge point of 32.92
-against naive's 31.51 — a 4% margin — and never asked how repeatable 32.92 was. It is
-not: re-running the fingerprint an hour later gave 30.91, which puts naive on the
-*other* side of the knee, and the honest band is 20.08–40.55. The conclusion was
-inside the noise the whole time. The measurement was fine; treating a single median
-as a fact was not.
-
-**4. `sdpa_kernel` is a silent no-op on MPS.** Forcing a backend appeared to work —
-no error, plausible timings. The probe row says `sdpa_backend_honored=False`: it ran
-whatever kernel the device picked. Had I not checked, the CSV would have carried four
-columns of "MATH backend" numbers that were nothing of the sort. On CPU the same probe
-correctly raises. Never trust a backend you did not verify was honored.
-
-## Reading that this is built on
-
-- Dao, Fu, Ermon, Rudra, Ré. *FlashAttention: Fast and Memory-Efficient Exact Attention with IO-Awareness.* NeurIPS 2022. — the IO-complexity argument in §3.2 is the load-bearing part.
-- Dao. *FlashAttention-2.* 2023. — work partitioning and cutting non-matmul FLOPs. Read before tuning anything.
-- Shah et al. *FlashAttention-3.* 2024. — warp specialization and FP8 on Hopper. Only relevant with an H100.
-- Milakov, Gimelshein. *Online normalizer calculation for softmax.* 2018. — the two-page paper the whole thing rests on.
-- Rabe, Staats. *Self-attention Does Not Need O(n²) Memory.* 2021. — the memory result without the IO-awareness framing.
-- The Triton tutorial `06-fused-attention.py` — after writing my own, not before.
-
-## Running it
+## 4. Reproducing
 
 ```bash
-make setup                                  # venv + deps
-.venv/bin/python -m scripts.env             # writes HARDWARE.md + hardware.json
-.venv/bin/python -m pytest tests/           # 270 passed, 38 skipped, 192 xfailed (~11 s)
-.venv/bin/python -m pytest tests/ --slow    # 286 passed, 6 skipped, 208 xfailed (~39 s)
-.venv/bin/python -m fa.ref.online_softmax   # the four online-softmax experiments
-.venv/bin/python -m bench.roofline          # writes results/roofline.csv + .png (~14 min)
+python -m venv .venv && source .venv/bin/activate
+pip install -e ".[dev]"
 ```
 
-The 192 xfails are the kernel tests. They are written and will run the day there is a
-GPU; here they are xfail for lack of one, not for lack of a test.
+```bash
+python -m scripts.env          # hardware fingerprint -> HARDWARE.md, hardware.json
+python -m pytest tests/        # 270 passed, 38 skipped, 192 xfailed (~11 s)
+python -m fa.ref.online_softmax  # exactness proof and the accumulator experiments
+python -m bench.fusion         # CPU fusion measurement -> results/fusion.csv (~5 min)
+python -m bench.roofline       # full sweep -> results/roofline.csv, .png (~14 min)
+python scripts/check_numbers.py  # every figure above, re-derived from source data
+```
+
+The 192 expected failures are the kernel tests. They are written and will run
+against a Triton implementation the day there is a GPU; they are marked `xfail` for
+want of hardware, not for want of a test.
+
+`scripts/check_numbers.py` re-derives 23 of the figures in this file from
+`hardware.json` and `results/*.csv` and fails if they disagree. It runs in CI on
+every push, because prose goes stale when the underlying data is regenerated rather
+than when the prose is edited — which is precisely how the ridge-point error above
+survived for several hours.
+
+## 5. Method and structure
+
+The work is organised as twelve task specifications in [`prompts/`](prompts/), with
+a dependency graph and a file-ownership contract in [`AGENTS.md`](AGENTS.md).
+
+```
+fa/ref/        fp64 ground truth; naive, chunked and backend-forced SDPA baselines;
+               the NumPy online-softmax reference, written in the shape the eventual
+               Triton kernel takes (outer loop over query blocks, inner loop over
+               key/value blocks, fp32 accumulators, causal split into three zones)
+fa/triton/     empty — task 03 and 05-10
+fa/cuda/       empty — task 10
+tests/         500 tests; 192 xfail pending a GPU
+bench/         roofline sweep and CPU fusion measurement
+notes/         derivations, the write-up, and the logbook
+results/       generated CSVs and figures, committed so the tables above reproduce
+```
+
+Two decisions are worth defending. First, the test suite was written against the
+references *before* any kernel existed; a harness written afterwards tends to encode
+the kernel's own bugs as expected behaviour. Second, the correctness criterion is
+relative rather than absolute — a kernel's error against the fp64 reference must be
+no worse than twice the naive implementation's error against the same reference.
+Attention's numerical error grows with sequence length and score magnitude, so any
+fixed tolerance is either loose enough to admit broken kernels or tight enough to
+reject correct ones. Ground truth is fp64 throughout and never
+`scaled_dot_product_attention`, which is itself FlashAttention and would conceal any
+bug the two implementations shared.
+
+[`notes/LOGBOOK.md`](notes/LOGBOOK.md) is the running record: what was tried, the
+number before and after, and what I concluded, including the entries where the
+conclusion was wrong.
+
+## 6. Limitations
+
+The kernel — the object the project is named after — does not exist. Everything here
+is baselines, references, harness and analysis.
+
+Every measurement is Apple silicon. Unified memory has a compute-to-bandwidth ratio
+unlike any discrete GPU, and while the shape of these results should transfer, no
+individual number will. In particular the roofline verdict for the unfused baselines
+is indeterminate here and would likely be decisive on a discrete card, where the
+ridge point sits far higher.
+
+The fusion measurement in §2 is inductor's C++ code generation, not FlashAttention.
+There is no tiling, no online softmax, no explicit shared-memory blocking, and it
+still allocates `O(N²)`, so it does not address the memory wall — only the traffic.
+It establishes that the mechanism is real and worth measuring; it is not a
+substitute for the kernel and should not be quoted as one.
+
+`sdpa_kernel` is a silent no-op on MPS. Forcing a backend there does nothing and
+raises no error; those rows are labelled `NOT HONORED` in the CSV rather than
+reported as a MATH-backend measurement. On the CPU the same probe behaves correctly.
+
+The backward pass is derived on paper and never executed.
+
+## 7. Errors worth recording
+
+Five, in descending order of how much they should have embarrassed me.
+
+I twice reported a trend from single-run measurements and twice had to withdraw it.
+First the ridge point, below. Then the fusion speedup, where one pass per size gave
+a clean monotone climb to 4.47× and five passes gave a plateau near 3× with a
+±25% interval at one of the sizes. Both times the number was not wrong so much as
+reported without an error bar, and both times the error bar was wide enough to
+delete the claim. `bench/fusion.py` now interleaves repeats and reports the range.
+
+I claimed attention was memory-bound here before checking the error bar on the
+quantity I was claiming it from. Re-running the fingerprint an hour later moved the
+ridge point across naive's arithmetic intensity and inverted the conclusion. The
+measurement was fine; treating one median as a fact was not.
+
+I expected tiling to be the win. It is 0.56× at every size that fits. The win is
+fusion, and tiling is its prerequisite — obvious in hindsight, and not obvious to me
+beforehand.
+
+I predicted the out-of-memory threshold with the textbook two-tensor model and was
+19.2% out, beyond the 15% bar I had set. Rather than widen the bar I solved for the
+implied tensor count: 3.16, not 2. The third is the `masked_fill` intermediate held
+alongside `S` and `P`. With three the prediction lands at −2.7%. The textbook byte
+model under-counts any real implementation by exactly the tensors the framework
+happens to materialise.
+
+I trusted `sdpa_kernel` without verifying it was honoured. It failed silently and
+plausibly, and four columns of results would have carried a backend label that was
+simply false. The same instinct — check that the knob you turned did something —
+later caught an undeclared scipy dependency and a `make lint` target that contradicted
+a passing CI, both found by cloning the repository fresh and running it as a stranger
+would.
+
+## 8. References
+
+Milakov and Gimelshein, *Online normalizer calculation for softmax* (2018), is the
+two-page result the whole construction rests on. Rabe and Staats, *Self-attention
+Does Not Need O(n²) Memory* (2021), gives the memory result without the IO framing;
+`chunked_attention` here is essentially their construction, and §2 is the measurement
+of why that is not sufficient. Dao, Fu, Ermon, Rudra and Ré, *FlashAttention* (2022),
+adds the IO-awareness that makes the difference, with the complexity argument in §3.2.
+Dao, *FlashAttention-2* (2023), covers work partitioning and the loop ordering the
+NumPy reference is written in. Shah et al., *FlashAttention-3* (2024), addresses
+Hopper-specific warp specialisation and FP8. Kwon et al., *PagedAttention* (2023), is
+the basis for the paged-cache task.
 
 ## Author
 
