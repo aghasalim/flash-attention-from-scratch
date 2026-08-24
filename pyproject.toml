@@ -15,6 +15,12 @@ license = { file = "LICENSE" }
 dependencies = [
   "torch",
   "numpy",
+  # scipy is the *independent* reference the online-softmax experiments check
+  # against -- comparing our softmax to our own softmax would prove nothing.
+  # Imported lazily inside fa/ref/online_softmax.py, so the test suite passes
+  # without it; `python -m fa.ref.online_softmax` does not. Undeclared until a
+  # fresh-clone run caught it.
+  "scipy",
   "pytest",
   "pandas",
   "matplotlib",
