@@ -221,10 +221,17 @@ GPU; here they are xfail for lack of one, not for lack of a test.
 ## Author
 
 Aghasalim Mustafazada — third-year AI student at Howest, Belgium.
-[GitHub](https://github.com/aghasalim) ·
-[Kaggle](https://www.kaggle.com/aghasalimmustafazada) ·
-[LinkedIn](https://linkedin.com/in/mustafazada) ·
-[ORCID](https://orcid.org/0009-0001-8746-4582)
+
+<p align="center">
+  <a href="https://github.com/aghasalim">
+    <img src="https://img.shields.io/badge/GitHub-181717?style=for-the-badge&logo=github&logoColor=white" alt="github"></a>
+  <a href="https://www.kaggle.com/aghasalimmustafazada">
+    <img src="https://img.shields.io/badge/Kaggle-20BEFF?style=for-the-badge&logo=kaggle&logoColor=white" alt="kaggle"></a>
+  <a href="https://linkedin.com/in/mustafazada">
+    <img src="https://img.shields.io/badge/LinkedIn-0A66C2?style=for-the-badge&logo=linkedin&logoColor=white" alt="linkedin"></a>
+  <a href="https://orcid.org/0009-0001-8746-4582">
+    <img src="https://img.shields.io/badge/ORCID-A6CE39?style=for-the-badge&logo=orcid&logoColor=white" alt="orcid"></a>
+</p>
 
 ## License
 
