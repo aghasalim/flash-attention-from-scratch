@@ -87,6 +87,21 @@ reports a range rather than a lone median.
 
 ![attention roofline measured on Apple M4](results/roofline.png)
 
+![latency scaling and the tiling crossover](results/latency-scaling.png)
+
+The crossover is the argument for tiling, and it is not a speed argument. Chunked
+attention is *slower* than naive at every sequence length that fits in memory,
+then roughly 38x faster at the first one that does not — because naive is no
+longer computing, it is failing to allocate.
+
+![analytic memory traffic and how each configuration ended](results/memory.png)
+
+![the OOM ladder](results/oom-ladder.png)
+
+The score matrix is N² elements; naive materialises it and chunked never does.
+That is a memory-model claim before it is a performance one, so the ladder walks N
+upward until allocation actually fails, rather than asserting where it would.
+
 Both baselines sit left of the ridge on MPS, which is the claim this repo opened
 with, measured rather than quoted. The fused ideal is not plotted as a point
 because nothing executes it yet — its arithmetic intensity is analytic, 2048
