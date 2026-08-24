@@ -2,13 +2,13 @@
 
 A fused, IO-aware attention kernel, built from the ground up — online softmax on paper, then Triton, then raw CUDA C++ with `mma` intrinsics — to be benchmarked against `torch.nn.functional.scaled_dot_product_attention` and the official `flash-attn` package.
 
-> **Status: planned, not built.** Right now this repo contains the task specs and
-> the research log, and nothing else. There is no kernel, no benchmark, and no
-> results table yet. Every number below is a `TODO` because nothing has been
-> measured. I'd rather have an empty table than a borrowed one.
->
-> I also don't have the hardware yet — this is a Mac, so there's no CUDA device
-> to run any of it on. Sorting that out is step zero.
+> **Status: waves 0–1 done and measured. Waves 2–5 are blocked on hardware.**
+> The math, the reference implementations, the test suite, and the roofline analysis
+> are built and their numbers are real, taken on this machine and reproducible from
+> `results/`. There is no kernel yet: Triton has no macOS wheel and there is no CUDA
+> device here, so tasks 03 and 05–10 cannot run until I have an NVIDIA GPU. Nothing
+> in this repo is estimated, and every CUDA-only quantity says so in those words
+> rather than borrowing a number from the paper.
 
 ---
 
@@ -68,30 +68,70 @@ These are in [`AGENTS.md`](AGENTS.md) in full. The ones that matter most:
 
 ## Hardware
 
-Nothing measured yet — `scripts/env.py` (task 00) writes this section, and it
-needs an NVIDIA GPU that this machine doesn't have.
+Measured by `scripts/env.py`, which writes `HARDWARE.md` and `hardware.json`. It has
+a full NVIDIA path; on this machine that path finds nothing and says so.
 
-- **GPU:** TODO
-- **Measured FP16 tensor-core throughput:** TODO TFLOP/s
-- **Measured HBM bandwidth:** TODO GB/s (measured with a copy kernel, not the spec sheet)
-- **Shared memory per SM:** TODO KB
-- CUDA TODO · PyTorch TODO · Triton TODO
+- **Device:** Apple M4, 10 GPU cores, 25.77 GB unified memory (macOS 26.5.2, arm64)
+- **Measured copy-kernel bandwidth:** 95.5 GB/s MPS · 94.0 GB/s CPU (1 GiB fp16 buffers, 10 warmup + median of 20)
+- **Measured matmul throughput** (FLOPs = 2·M·N·K, M=N=K=8192): MPS fp16 3142.6 GFLOP/s · bf16 2744.8 · fp32 2331.8; CPU fp32 1652.2, fp64 468.7
+- **CUDA:** none. HBM bandwidth, tensor-core TFLOP/s, SM count, shared memory, `cp.async`/FP8/TMA/WGMMA flags — all `not measured on this hardware (no CUDA device; developed on Apple M4)`
+- **Triton:** not installed; no macOS wheel exists, so it lives in the `[gpu]` extra
+- Python 3.14.4 · torch 2.13.0
 
-Everything in `results/` will be specific to whatever card this ends up running
-on. Those numbers won't transfer to a different architecture and I'm not going to
-pretend they do.
+Two constraints this turned up that shaped later tasks: MPS has no float64 at all, so
+the fp64 reference runs on CPU; and run-to-run spread on the same matmul is ~18%
+(MPS fp16 came back 3418 GFLOP/s at 09:50 and 2895 at 09:54), so every benchmark here
+reports a range rather than a lone median.
 
 ## Results
 
 <!-- BENCH:START -->
-Nothing measured yet. `make bench` writes `results/bench.csv`, and `make report`
-regenerates this section from that file — so a number can't appear here without
-first existing in a CSV.
+No kernel yet, so there is no kernel row. What exists is the baseline sweep the kernel
+will eventually be measured against — `results/roofline.csv` (92 rows, 834.6 s),
+plotted in `results/roofline.png`.
+
+**Is attention memory-bound here?** Yes, measured. Ridge point on MPS fp16 is
+**32.92 FLOP/byte** (3142.6 GFLOP/s ÷ 95.45 GB/s). Measured arithmetic intensity at
+`N=4096`, `B=4 H=32 D=64`:
+
+| implementation | AI (FLOP/byte) | verdict |
+|---|---:|---|
+| naive | 31.51 | left of ridge → memory-bound |
+| chunked | 29.47 | left of ridge → memory-bound |
+| fused ideal (S, P never stored) | 2048.00 | 62× right of ridge → compute-bound |
+
+**Latency, MPS fp16, non-causal**, median from the CSV:
+
+| seq_len | naive | chunked | naive ÷ chunked |
+|--------:|------:|--------:|----------------:|
+| 512 | 11.2 ms | 20.1 ms | 0.56× |
+| 1024 | 43.1 ms | 74.7 ms | 0.58× |
+| 2048 | 174.2 ms | 294.6 ms | 0.59× |
+| 4096 | 46545.5 ms | 1226.6 ms | **37.95×** |
+| 8192 | OOM | 4785.5 ms | — |
+| 16384 | OOM | 32669.5 ms | — |
+
+Chunking is *slower* than naive at every size that fits, then 38× faster the moment
+it stops fitting. The naive-vs-FlashAttention ratio, which is the number this table
+actually wants, is `not measured on this hardware (no CUDA device; developed on Apple M4)`.
+
+Full derivations, the ridge-point argument, and the OOM prediction are in
+[`notes/00-roofline.md`](notes/00-roofline.md).
 <!-- BENCH:END -->
 
 ## Feature coverage
 
-Nothing ticked yet. An honest partial checklist beats a complete one.
+Nothing kernel-side is ticked, because nothing kernel-side can run here.
+
+**Done and measured (waves 0–1):**
+
+- [x] Hardware fingerprint with measured bandwidth/throughput, honest nulls for absent hardware
+- [x] Online-softmax derivation + induction proof of exactness, and a NumPy reference shaped like the kernel
+- [x] fp64 ground truth and a 500-test correctness suite (relative bar, adversarial, prime lengths, four invariants)
+- [x] Naive / chunked / backend-forced-SDPA baselines
+- [x] Roofline analysis: FLOP and byte derivations, measured ridge point, measured OOM threshold
+
+**Blocked on an NVIDIA GPU (waves 2–5):**
 
 - [ ] Forward, non-causal, fp16/bf16, head_dim ∈ {32, 64, 128}
 - [ ] Backward via recomputation from stored logsumexp
@@ -124,14 +164,27 @@ prompts/          the task specs that build all of the above (see AGENTS.md)
 
 ## What I got wrong
 
-Empty on purpose. [`notes/LOGBOOK.md`](notes/LOGBOOK.md) collects these as they
-happen — dated, with the number that moved and what I concluded. This section
-gets filled in from real entries at the end (task 11), not from a template.
+Real ones, from [`notes/LOGBOOK.md`](notes/LOGBOOK.md). More will land as the kernel does.
 
-The logbook is the file I expect to get the most out of. Two months after tuning
-a kernel, the difference between "I built a FlashAttention kernel" and being able
-to say *why* one config beat another on one specific card is whether you wrote it
-down at the time.
+**1. My OOM prediction was 19% off, and widening the bar would have hidden the reason.**
+The textbook model says naive attention dies when the two `N²` tensors (`S` and `P`)
+fill memory, which predicted `N≈6103`. It actually died at 5120. The failure implies
+~3.16 concurrent `N²` tensors, not 2 — the third is the `masked_fill` allocation held
+alongside them. With three the prediction is `N≈4983`, off by −2.7%. The byte model
+under-counts any real implementation by exactly the intermediates the framework
+materialises.
+
+**2. I assumed tiling was the win. It is not — it moved arithmetic intensity the wrong way.**
+Chunked attention is 0.56–0.59× the speed of naive at every `N` that fits, and its
+measured AI is 29.47 against naive's 31.51. Tiling buys `Θ(N²) → Θ(N·BLOCK)` memory
+and nothing else; the bytes are unchanged. That pair of numbers is the argument for
+fusion, and I had the causality backwards until I measured it.
+
+**3. `sdpa_kernel` is a silent no-op on MPS.** Forcing a backend appeared to work —
+no error, plausible timings. The probe row says `sdpa_backend_honored=False`: it ran
+whatever kernel the device picked. Had I not checked, the CSV would have carried four
+columns of "MATH backend" numbers that were nothing of the sort. On CPU the same probe
+correctly raises. Never trust a backend you did not verify was honored.
 
 ## Reading that this is built on
 
@@ -144,14 +197,17 @@ down at the time.
 
 ## Running it
 
-Once task 00 lands:
-
 ```bash
-make setup       # venv + deps, prints the hardware table
-make test        # correctness suite (needs a GPU)
-make bench       # writes results/bench.csv and regenerates the README tables
-make profile     # ncu on the forward kernel, occupancy + stall reasons
+make setup                                  # venv + deps
+.venv/bin/python -m scripts.env             # writes HARDWARE.md + hardware.json
+.venv/bin/python -m pytest tests/           # 270 passed, 38 skipped, 192 xfailed (~11 s)
+.venv/bin/python -m pytest tests/ --slow    # 286 passed, 6 skipped, 208 xfailed (~39 s)
+.venv/bin/python -m fa.ref.online_softmax   # the four online-softmax experiments
+.venv/bin/python -m bench.roofline          # writes results/roofline.csv + .png (~14 min)
 ```
+
+The 192 xfails are the kernel tests. They are written and will run the day there is a
+GPU; here they are xfail for lack of one, not for lack of a test.
 
 ## License
 
