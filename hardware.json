@@ -1,0 +1,266 @@
+{
+  "cuda_available": false,
+  "notes": "Built on an Apple M4 (arm64, macOS). torch.cuda.is_available() is False and Triton publishes no macOS wheel, so every NVIDIA-only field in this file is null and renders in HARDWARE.md as: 'not measured on this hardware (no CUDA device; developed on Apple M4)'. The mps and cpu numbers here are real measurements taken by scripts/env.py on this machine; they are Apple GPU / CPU numbers and are never a stand-in for a CUDA result. Re-run with: python -m scripts.env",
+  "device_class": "apple-mps",
+  "has_mps": true,
+  "device": {
+    "name": "Apple M4",
+    "gpu_backend": "Apple Metal via torch MPS",
+    "gpu_cores": 10,
+    "cpu_logical_cores": 10,
+    "cpu_performance_cores": 4,
+    "cpu_efficiency_cores": 6,
+    "unified_memory_bytes": 25769803776,
+    "memory_model": "unified (CPU and GPU share physical memory)",
+    "compute_capability": null,
+    "sm_count": null,
+    "total_memory_bytes": null,
+    "shared_memory_per_sm_bytes": null,
+    "shared_memory_per_block_bytes": null,
+    "regs_per_sm": null,
+    "max_threads_per_block": null,
+    "warp_size": null,
+    "l2_cache_bytes": null
+  },
+  "capabilities": {
+    "has_bf16": {
+      "value": true,
+      "reason": "probed: 64x64 bf16 matmul on device='mps'"
+    },
+    "has_cp_async": {
+      "value": false,
+      "reason": "CUDA sm_80+ PTX instruction; no CUDA device"
+    },
+    "has_fp8": {
+      "value": false,
+      "reason": "CUDA sm_89+ tensor-core format; no CUDA device"
+    },
+    "has_tma": {
+      "value": false,
+      "reason": "CUDA sm_90+ feature; no CUDA device"
+    },
+    "has_wgmma": {
+      "value": false,
+      "reason": "CUDA sm_90+ feature; no CUDA device"
+    },
+    "has_triton": {
+      "value": false,
+      "reason": "import triton -> not installed (no macOS wheels; see the [gpu] extra in pyproject.toml)"
+    },
+    "fp64_on_mps": {
+      "value": false,
+      "reason": "probed: MPS has no float64, so fp64 references must run on the CPU"
+    }
+  },
+  "bandwidth": {
+    "mps": {
+      "ok": true,
+      "gb_per_s": 95.45370426746706,
+      "gb_per_s_best": 95.91244393372932,
+      "gb_per_s_worst": 89.6164872556993,
+      "buffer_bytes": 1073741824,
+      "bytes_moved_per_iter": 2147483648,
+      "method": "x.copy_(y), fp16, median of timed wall-clock runs, device-synced each run",
+      "median_s": 0.022497646000019245,
+      "min_s": 0.022390042000012045,
+      "max_s": 0.02396304199999122,
+      "stdev_s": 0.00033829393241658766,
+      "warmup_iters": 10,
+      "timed_iters": 20
+    },
+    "cpu": {
+      "ok": true,
+      "gb_per_s": 94.00654767705434,
+      "gb_per_s_best": 99.27576210613158,
+      "gb_per_s_worst": 82.50244629780819,
+      "buffer_bytes": 1073741824,
+      "bytes_moved_per_iter": 2147483648,
+      "method": "x.copy_(y), fp16, median of timed wall-clock runs, device-synced each run",
+      "median_s": 0.022843979499995726,
+      "min_s": 0.021631500000012238,
+      "max_s": 0.026029332999996768,
+      "stdev_s": 0.0013103355996695726,
+      "warmup_iters": 10,
+      "timed_iters": 20
+    },
+    "cuda": null
+  },
+  "dtypes": {
+    "fp16": {
+      "mps": {
+        "supported": true,
+        "probe_error": null,
+        "matmul": {
+          "ok": true,
+          "gflop_s": 3142.555322089269,
+          "gflop_s_best": 3599.487590864349,
+          "gflop_s_worst": 1791.1512489071317,
+          "m_n_k": 8192,
+          "flops_per_matmul": 1099511627776.0,
+          "size_note": "M=N=K=8192",
+          "accumulate": "torch.matmul default accumulation for this dtype/backend",
+          "median_s": 0.34987820899999633,
+          "min_s": 0.305463374999988,
+          "max_s": 0.6138574999999946,
+          "stdev_s": 0.0717209332294916,
+          "warmup_iters": 10,
+          "timed_iters": 20
+        }
+      },
+      "cpu": {
+        "supported": true,
+        "probe_error": null,
+        "matmul": {
+          "ok": true,
+          "gflop_s": 3.3297166928555804,
+          "gflop_s_best": 3.36491139293521,
+          "gflop_s_worst": 3.149889530076243,
+          "m_n_k": 1024,
+          "flops_per_matmul": 2147483648.0,
+          "size_note": "M=N=K=1024 (not 8192: one matmul there exceeds the 1.5s per-iteration budget on this device/dtype)",
+          "accumulate": "torch.matmul default accumulation for this dtype/backend",
+          "median_s": 0.6449448545000109,
+          "min_s": 0.638199166999982,
+          "max_s": 0.681764749999985,
+          "stdev_s": 0.012557506555525715,
+          "warmup_iters": 10,
+          "timed_iters": 20
+        }
+      }
+    },
+    "bf16": {
+      "mps": {
+        "supported": true,
+        "probe_error": null,
+        "matmul": {
+          "ok": true,
+          "gflop_s": 2744.7734123104115,
+          "gflop_s_best": 2889.9396832625316,
+          "gflop_s_worst": 2570.2022222278247,
+          "m_n_k": 8192,
+          "flops_per_matmul": 1099511627776.0,
+          "size_note": "M=N=K=8192",
+          "accumulate": "torch.matmul default accumulation for this dtype/backend",
+          "median_s": 0.4005837505000045,
+          "min_s": 0.38046179099998767,
+          "max_s": 0.42779187499999694,
+          "stdev_s": 0.012345182667059043,
+          "warmup_iters": 10,
+          "timed_iters": 20
+        }
+      },
+      "cpu": {
+        "supported": true,
+        "probe_error": null,
+        "matmul": {
+          "ok": true,
+          "gflop_s": 3.276103168217126,
+          "gflop_s_best": 3.3179373297415538,
+          "gflop_s_worst": 3.1935598640916103,
+          "m_n_k": 1024,
+          "flops_per_matmul": 2147483648.0,
+          "size_note": "M=N=K=1024 (not 8192: one matmul there exceeds the 1.5s per-iteration budget on this device/dtype)",
+          "accumulate": "torch.matmul default accumulation for this dtype/backend",
+          "median_s": 0.6554993959999962,
+          "min_s": 0.6472345420000067,
+          "max_s": 0.6724419580000074,
+          "stdev_s": 0.007392232426283373,
+          "warmup_iters": 10,
+          "timed_iters": 20
+        }
+      }
+    },
+    "fp32": {
+      "mps": {
+        "supported": true,
+        "probe_error": null,
+        "matmul": {
+          "ok": true,
+          "gflop_s": 2331.778187215279,
+          "gflop_s_best": 2805.7850173144566,
+          "gflop_s_worst": 1817.41464357927,
+          "m_n_k": 8192,
+          "flops_per_matmul": 1099511627776.0,
+          "size_note": "M=N=K=8192",
+          "accumulate": "torch.matmul default accumulation for this dtype/backend",
+          "median_s": 0.4715335420000173,
+          "min_s": 0.39187308399999665,
+          "max_s": 0.6049866669999915,
+          "stdev_s": 0.051498688315387,
+          "warmup_iters": 10,
+          "timed_iters": 20
+        }
+      },
+      "cpu": {
+        "supported": true,
+        "probe_error": null,
+        "matmul": {
+          "ok": true,
+          "gflop_s": 1652.238734452526,
+          "gflop_s_best": 1744.2240931810622,
+          "gflop_s_worst": 1362.3335925424028,
+          "m_n_k": 8192,
+          "flops_per_matmul": 1099511627776.0,
+          "size_note": "M=N=K=8192",
+          "accumulate": "torch.matmul default accumulation for this dtype/backend",
+          "median_s": 0.6654677710000101,
+          "min_s": 0.6303729159999989,
+          "max_s": 0.8070795829999895,
+          "stdev_s": 0.04752992992451237,
+          "warmup_iters": 10,
+          "timed_iters": 20
+        }
+      }
+    },
+    "fp64": {
+      "mps": {
+        "supported": false,
+        "probe_error": "TypeError: Cannot convert a MPS Tensor to float64 dtype as the MPS framework doesn't support float64. Please use float32 instead.",
+        "matmul": null
+      },
+      "cpu": {
+        "supported": true,
+        "probe_error": null,
+        "matmul": {
+          "ok": true,
+          "gflop_s": 468.6761982504744,
+          "gflop_s_best": 470.6544170479361,
+          "gflop_s_worst": 364.4834228181685,
+          "m_n_k": 4096,
+          "flops_per_matmul": 137438953472.0,
+          "size_note": "M=N=K=4096 (not 8192: one matmul there exceeds the 1.5s per-iteration budget on this device/dtype)",
+          "accumulate": "torch.matmul default accumulation for this dtype/backend",
+          "median_s": 0.2932492709999934,
+          "min_s": 0.29201670800000556,
+          "max_s": 0.3770787500000097,
+          "stdev_s": 0.019108349704761555,
+          "warmup_iters": 10,
+          "timed_iters": 20
+        }
+      }
+    }
+  },
+  "versions": {
+    "python": "3.14.4",
+    "torch": "2.13.0",
+    "triton": "not installed (no macOS wheels; see the [gpu] extra in pyproject.toml)",
+    "cuda_runtime": null,
+    "cudnn": null,
+    "driver": null,
+    "macos": "26.5.2 25F84"
+  },
+  "profiler": {
+    "ncu": null,
+    "ncu_note": "Nsight Compute is NVIDIA-only and is not installed here; `make profile` says so instead of pretending",
+    "alternative": "Metal System Trace / Xcode Instruments (not wired up by task 00)"
+  },
+  "platform": {
+    "system": "Darwin",
+    "release": "25.5.0",
+    "machine": "arm64",
+    "platform": "macOS-26.5.2-arm64-arm-64bit-Mach-O",
+    "processor": "Apple M4"
+  },
+  "measured_at": "2026-08-24 10:18:24 CEST",
+  "command": "python -m scripts.env"
+}

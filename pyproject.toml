@@ -1,0 +1,51 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "flash-attention-from-scratch"
+version = "0.1.0"
+description = "A fused, IO-aware attention kernel built from scratch, with the measurements to back it up."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { file = "LICENSE" }
+
+# Versions are deliberately unpinned. The resolved versions on the machine that
+# produced the numbers are recorded in HARDWARE.md / hardware.json instead.
+dependencies = [
+  "torch",
+  "numpy",
+  "pytest",
+  "pandas",
+  "matplotlib",
+  "tabulate",
+]
+
+[project.optional-dependencies]
+# Triton is NOT a hard dependency: it publishes no macOS wheels, so listing it in
+# [project.dependencies] makes `pip install -e .` fail outright on this machine.
+# It lives here so `pip install -e .[gpu]` works on the NVIDIA box where the
+# kernels in fa/triton/ actually run.
+gpu = ["triton"]
+dev = ["ruff", "mypy"]
+
+[tool.setuptools.packages.find]
+include = ["fa*", "bench*", "scripts*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra"
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+# prompts/ is prose, not source. ruff formats the Python it finds in the fenced
+# blocks there, and those blocks are quoted task specs -- not ours to reformat.
+extend-exclude = ["prompts"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+
+[tool.mypy]
+python_version = "3.10"
+ignore_missing_imports = true
