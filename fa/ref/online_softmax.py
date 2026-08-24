@@ -19,6 +19,8 @@ Run the self-check and the four numerical experiments:
 
 from __future__ import annotations
 
+import pathlib
+
 import numpy as np
 
 __all__ = ["online_softmax", "online_attention", "logsumexp_rows", "causal_zone"]
@@ -271,6 +273,19 @@ def _exp_b(rng):
         out.append((n, a32, a16, r32, r16, s32, s16, a16 / a32, s16 / s32))
         print(f"  {n:>12} | {a32:>12.3e} | {a16:>12.3e} | {r32:>12.3e} | {r16:>12.3e} | "
               f"{s32:>12.3e} | {s16:>12.3e} | {a16/a32:>11.0f}x | {s16/s32:>11.0f}x")
+
+    # Emit the table so bench/figures.py can plot it without re-deriving it. An
+    # earlier version of that figure re-ran the experiment and forgot acc_dtype,
+    # so both arms silently used the fp32 default and the plot showed two
+    # identical lines claiming a 1x gap. Figures read committed data; they do not
+    # re-measure.
+    import csv as _csv
+    results = pathlib.Path(__file__).resolve().parents[2] / "results"
+    results.mkdir(exist_ok=True)
+    with (results / "accumulator.csv").open("w", newline="") as fh:
+        w = _csv.writer(fh)
+        w.writerow(hdr)
+        w.writerows(out)
     return out
 
 

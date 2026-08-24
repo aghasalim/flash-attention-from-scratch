@@ -16,17 +16,27 @@ here says so explicitly rather than being estimated or taken from the literature
 
 ## 1. The question
 
-Attention computes `S = QKᵀ/√d`, `P = softmax(S)`, `O = PV`. The received account is
-that the cost is dominated not by the two matrix multiplications but by writing the
-`B·H·N²` score matrix out to memory and reading it back — an intermediate the caller
-never asked for. Fusing the softmax into the matmuls, so that `S` and `P` never leave
-on-chip memory, is supposed to remove that traffic entirely.
+Attention computes `S = QKᵀ/√d`, `P = softmax(S)`, `O = PV`. The cost is supposed to
+be dominated not by the two matmuls but by writing the `B·H·N²` score matrix to
+memory and reading it back — an intermediate the caller never asked for.
 
-The ratio of score traffic to parameter traffic is `N/D`. At `D = 64` the scores
-overtake `Q`, `K`, `V` and `O` combined at `N = 64`, and by `N = 4096` they are 32×
-everything else. The argument is clearly right in the limit. What I wanted to know
-was whether it is measurable, and by how much, on a machine I own — and it turned
-out the answer is less clean than I expected.
+The ratio of score traffic to parameter traffic is `N/D`, so at `D = 64` the scores
+overtake `Q`, `K`, `V` and `O` combined at `N = 64`:
+
+| N | Q,K,V,O | S,P | ratio |
+|---:|---:|---:|---:|
+| 1024 | 0.062 GiB | 0.500 GiB | 8× |
+| 4096 | 0.250 GiB | 8.000 GiB | 32× |
+| 16384 | 1.000 GiB | 128.000 GiB | 128× |
+
+fp16, `B=4 H=32 D=64`. The argument is clearly right in the limit; what I wanted was
+a number for how much it is worth on a machine I own.
+
+![HBM traffic and how each configuration ended](results/memory.png)
+
+*Left: analytic traffic. Naive and chunked lie on top of each other — chunking
+changes when the bytes move, not how many. Right: naive is the only implementation
+that fails outright, on 4 of 24 configurations.*
 
 ## 2. What I found
 
@@ -48,13 +58,21 @@ different scale.
 CPU, fp32, `B=2 H=8 D=64`, five independent repeats with the variants interleaved;
 outputs agree with eager to 5.5e-07. Source: `results/fusion.csv`.
 
-I first ran this once per configuration and read a speedup that climbed steadily to
-4.47× at `N = 2048`, which is the shape the bandwidth argument predicts and which I
-was pleased to see. It does not survive repetition. With five repeats the ratio
-rises to about 3× by `N = 512` and then flattens, and the `N = 1024` interval alone
-spans 2.27–3.94. The benefit is real and substantial; the trend I wanted to read
-into it was noise. What the data does support is the level shift in throughput,
-which is large and stable across every size.
+![CPU fusion: latency and speedup with ranges](results/fusion.png)
+
+I first ran this once per configuration and read a speedup climbing steadily to
+4.47× — the shape the bandwidth argument predicts, and which I was pleased to see.
+It does not survive repetition. With five repeats the ratio reaches about 3× by
+`N = 512` and then flattens, and the `N = 1024` interval alone spans 2.27–3.94. The
+benefit is real; the trend I wanted to read into it was noise.
+
+What does hold is the level shift in throughput, which is large and stable at every
+size:
+
+![Achieved throughput as a share of measured fp32 peak](results/throughput.png)
+
+*Eager attention is pinned near 20–26% of peak regardless of sequence length — the
+signature of a workload waiting on memory. Fusing lifts it to 45–68%.*
 
 **Tiling on its own buys nothing, and I had assumed the opposite.** Chunked
 attention — looping over key/value blocks without fusing — is *not* faster than the
@@ -73,6 +91,15 @@ traffic stops fitting the 17.76 GiB working set. At that point chunked attention
 slower at every smaller size — is 37.95× faster, and naive fails outright 1024
 tokens later. Chunked, on the same sweep, reaches `N = 16384`.
 
+![Latency scaling on MPS and CPU](results/latency-scaling.png)
+
+Stepping `N` in increments of 256 locates the failure precisely, and shows why the
+textbook prediction missed it:
+
+![OOM ladder](results/oom-ladder.png)
+
+![Roofline](results/roofline.png)
+
 **The roofline does not settle the memory-bound question on this machine, and I
 initially claimed that it did.** The ridge point is 30.91 FLOP/byte at the median,
 but peak compute swings between 1937 and 3793 GFLOP/s with thermal state, which
@@ -87,6 +114,16 @@ implementation sits at 2048 FLOP/byte, 66× the ridge, and no amount of thermal 
 moves that. The direct measurements above — the fusion speedup, the cliff, the OOM —
 do not depend on a ridge point at all.
 
+**Causal masking is only a speedup if the hidden blocks are actually skipped.** This
+is measurable without writing a kernel, by comparing implementations that skip
+against ones that mask a dense `N×N`. The ones that mask run at 0.91–0.98× under
+causal — slightly *slower*, since masking is extra work over identical traffic —
+while the SDPA path, which classifies and skips blocks, reaches 2.02× and approaches
+the theoretical ceiling as `N` grows and the diagonal becomes a smaller share of the
+triangle. That gap is the entire value of block skipping, isolated.
+
+![Causal block skipping](results/causal-skipping.png)
+
 **The online-softmax recurrence is exact, and I proved it rather than assuming it.**
 Verified to 7.216e-16 against direct computation in fp64, across block sizes that do
 not evenly divide the sequence, causal and non-causal. Because the algorithm is
@@ -96,9 +133,17 @@ algorithm — which considerably narrows the search when debugging one.
 **Keeping accumulators in fp32 is worth a factor of 3297.** At `N = 8192`, fp16
 accumulation gives 1.568e-04 maximum absolute error against 4.755e-08 for fp32, and
 the denominator is 8202× worse. The relative error reaches 1.000 from `N = 1024`
-upward, meaning small probabilities are returned as literal zero. Separately,
-zero-filling a short trailing block instead of masking it with −∞ produces
-probabilities summing to 0.430484 rather than 1.
+upward, meaning small probabilities come back as literal zero.
+
+![fp32 vs fp16 accumulators](results/accumulator.png)
+
+*Only the accumulator dtype differs; inputs are fp16 in both arms. The left panel is
+why max-absolute-error alone is a poor diagnostic — it is flat in `N` because
+`max(p) ~ 1/N` — and the right panel is where the damage actually shows.*
+
+Separately, zero-filling a short trailing block instead of masking it with −∞ gives
+probabilities summing to 0.430484 rather than 1. Both traps are now numbers in the
+test suite rather than warnings in a comment.
 
 ## 3. What is measured, and what is not
 
@@ -114,10 +159,9 @@ finds nothing here and says so.
 | CUDA | none — HBM bandwidth, tensor-core throughput, SM count, `cp.async`/FP8/TMA all `not measured on this hardware` |
 | Triton | not installable; no darwin wheel exists |
 
-Two constraints this surfaced that shaped everything downstream: MPS provides no
-float64 at all, so the fp64 reference runs on the CPU; and run-to-run spread on an
-identical matmul is large enough to move a conclusion, so every figure here is a
-median reported with its range.
+Two constraints this surfaced: MPS provides no float64 at all, so the fp64 reference
+runs on the CPU; and run-to-run spread on an identical matmul is large enough to move
+a conclusion, so every figure here is a median reported with its range.
 
 Quantities requiring an NVIDIA GPU — the naive-versus-FlashAttention ratio, `exp2`
 against `exp`, block-size and pipeline-depth sweeps, shared-memory swizzling,
