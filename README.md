@@ -218,6 +218,14 @@ make setup                                  # venv + deps
 The 192 xfails are the kernel tests. They are written and will run the day there is a
 GPU; here they are xfail for lack of one, not for lack of a test.
 
+## Author
+
+Aghasalim Mustafazada — third-year AI student at Howest, Belgium.
+[GitHub](https://github.com/aghasalim) ·
+[Kaggle](https://www.kaggle.com/aghasalimmustafazada) ·
+[LinkedIn](https://linkedin.com/in/mustafazada) ·
+[ORCID](https://orcid.org/0009-0001-8746-4582)
+
 ## License
 
 MIT — see [LICENSE](LICENSE).
