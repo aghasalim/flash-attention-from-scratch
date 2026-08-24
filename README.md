@@ -72,16 +72,17 @@ Measured by `scripts/env.py`, which writes `HARDWARE.md` and `hardware.json`. It
 a full NVIDIA path; on this machine that path finds nothing and says so.
 
 - **Device:** Apple M4, 10 GPU cores, 25.77 GB unified memory (macOS 26.5.2, arm64)
-- **Measured copy-kernel bandwidth:** 95.5 GB/s MPS · 94.0 GB/s CPU (1 GiB fp16 buffers, 10 warmup + median of 20)
-- **Measured matmul throughput** (FLOPs = 2·M·N·K, M=N=K=8192): MPS fp16 3142.6 GFLOP/s · bf16 2744.8 · fp32 2331.8; CPU fp32 1652.2, fp64 468.7
+- **Measured copy-kernel bandwidth:** 95.9 GB/s MPS · 101.3 GB/s CPU (1 GiB fp16 buffers, 10 warmup + median of 20)
+- **Measured matmul throughput** (FLOPs = 2·M·N·K, M=N=K=8192): MPS fp16 2963.5 GFLOP/s · bf16 3014.7 · fp32 2542.8; CPU fp32 1738.3, fp64 463.0
 - **CUDA:** none. HBM bandwidth, tensor-core TFLOP/s, SM count, shared memory, `cp.async`/FP8/TMA/WGMMA flags — all `not measured on this hardware (no CUDA device; developed on Apple M4)`
 - **Triton:** not installed; no macOS wheel exists, so it lives in the `[gpu]` extra
 - Python 3.14.4 · torch 2.13.0
 
 Two constraints this turned up that shaped later tasks: MPS has no float64 at all, so
-the fp64 reference runs on CPU; and run-to-run spread on the same matmul is ~18%
-(MPS fp16 came back 3418 GFLOP/s at 09:50 and 2895 at 09:54), so every benchmark here
-reports a range rather than a lone median.
+the fp64 reference runs on CPU; and run-to-run spread on the same fp16 matmul is large
+and thermal — 1937–3793 GFLOP/s inside one run, and medians of 3142.6 and 2963.5 an
+hour apart. That spread is big enough to move the ridge point across a conclusion, so
+every benchmark here reports a range rather than a lone median.
 
 ## Results
 
@@ -114,15 +115,21 @@ No kernel yet, so there is no kernel row. What exists is the baseline sweep the 
 will eventually be measured against — `results/roofline.csv` (92 rows, 834.6 s),
 plotted in `results/roofline.png`.
 
-**Is attention memory-bound here?** Yes, measured. Ridge point on MPS fp16 is
-**32.92 FLOP/byte** (3142.6 GFLOP/s ÷ 95.45 GB/s). Measured arithmetic intensity at
-`N=4096`, `B=4 H=32 D=64`:
+**Is attention memory-bound here?** Not decisively — and that is the honest answer
+rather than the one I set out to get. The ridge point on MPS fp16 is **30.91
+FLOP/byte** median (2963.5 GFLOP/s ÷ 95.86 GB/s), but thermal spread on peak compute
+puts it anywhere in **20.08–40.55**. Measured arithmetic intensity at `N=4096`,
+`B=4 H=32 D=64`:
 
 | implementation | AI (FLOP/byte) | verdict |
 |---|---:|---|
-| naive | 31.51 | left of ridge → memory-bound |
-| chunked | 29.47 | left of ridge → memory-bound |
-| fused ideal (S, P never stored) | 2048.00 | 62× right of ridge → compute-bound |
+| naive | 31.51 | inside the ridge band — indeterminate |
+| chunked | 29.47 | inside the ridge band — indeterminate |
+| fused ideal (S, P never stored) | 2048.00 | **66× the ridge — decisively compute-bound** |
+
+Naive sits *on* the knee of the roofline, and which side it lands on depends on how
+warm the laptop is. What survives the noise is the fused comparison at 66×, and the
+two direct measurements below, which do not depend on a ridge point at all.
 
 **Latency, MPS fp16, non-causal**, median from the CSV:
 
@@ -140,7 +147,9 @@ it stops fitting. The naive-vs-FlashAttention ratio, which is the number this ta
 actually wants, is `not measured on this hardware (no CUDA device; developed on Apple M4)`.
 
 Full derivations, the ridge-point argument, and the OOM prediction are in
-[`notes/00-roofline.md`](notes/00-roofline.md).
+[`notes/00-roofline.md`](notes/00-roofline.md). The paper-style write-up, with the
+ablation table and an honest account of what the roofline does and does not settle,
+is [`notes/paper.md`](notes/paper.md).
 <!-- BENCH:END -->
 
 ## Feature coverage
@@ -204,7 +213,15 @@ measured AI is 29.47 against naive's 31.51. Tiling buys `Θ(N²) → Θ(N·BLOCK
 and nothing else; the bytes are unchanged. That pair of numbers is the argument for
 fusion, and I had the causality backwards until I measured it.
 
-**3. `sdpa_kernel` is a silent no-op on MPS.** Forcing a backend appeared to work —
+**3. I claimed attention was memory-bound here before checking the error bar.**
+The first version of this README said "Yes, measured" with a ridge point of 32.92
+against naive's 31.51 — a 4% margin — and never asked how repeatable 32.92 was. It is
+not: re-running the fingerprint an hour later gave 30.91, which puts naive on the
+*other* side of the knee, and the honest band is 20.08–40.55. The conclusion was
+inside the noise the whole time. The measurement was fine; treating a single median
+as a fact was not.
+
+**4. `sdpa_kernel` is a silent no-op on MPS.** Forcing a backend appeared to work —
 no error, plausible timings. The probe row says `sdpa_backend_honored=False`: it ran
 whatever kernel the device picked. Had I not checked, the CSV would have carried four
 columns of "MATH backend" numbers that were nothing of the sort. On CPU the same probe

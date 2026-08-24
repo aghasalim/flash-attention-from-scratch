@@ -106,24 +106,33 @@ Machine balance = measured compute ÷ measured bandwidth. Both measured by
 
 | device | compute | bandwidth | ridge point |
 |---|---:|---:|---:|
-| MPS fp16 | 3142.6 GFLOP/s | 95.45 GB/s | **32.92 FLOP/byte** |
-| CPU fp32 | 1652.2 GFLOP/s | 94.01 GB/s | **17.58 FLOP/byte** |
+| MPS fp16 | 2963.5 GFLOP/s | 95.86 GB/s | **30.91 FLOP/byte** |
+| CPU fp32 | 1738.3 GFLOP/s | 101.29 GB/s | **17.16 FLOP/byte** |
+
+The MPS ridge point is **not stable**. Peak compute swings 1937–3793 GFLOP/s with
+thermal state, which puts the ridge anywhere in **20.08–40.55 FLOP/byte**. That band
+is wide enough to change the verdict below, so read the next table with it in mind.
 | CUDA | `not measured on this hardware (no CUDA device; developed on Apple M4)` | same | same |
 
 Measured arithmetic intensity at `N=4096`, MPS fp16, non-causal, from
 `results/roofline.csv`:
 
-| implementation | AI (FLOP/byte) | vs ridge (32.92) |
+| implementation | AI (FLOP/byte) | vs ridge (30.91, band 20.08–40.55) |
 |---|---:|---|
-| naive | 31.51 | just left of the ridge → **memory-bound** |
-| chunked | 29.47 | left of the ridge → **memory-bound** |
-| fused ideal (`S`,`P` never stored) | 2048.00 | 62× right of the ridge → **compute-bound** |
+| naive | 31.51 | inside the band → **indeterminate** |
+| chunked | 29.47 | inside the band → **indeterminate** |
+| fused ideal (`S`,`P` never stored) | 2048.00 | 66× the ridge → **decisively compute-bound** |
 
-That is the roofline result in one table. Both unfused implementations sit
-essentially *on* the ridge and slightly to the memory side of it, so they are
-bandwidth-limited. Fusion moves arithmetic intensity by roughly two orders of
-magnitude and relocates the problem to the compute side, where the tensor cores
-can actually be the constraint.
+That is the roofline result, and it is weaker than I wanted. Both unfused
+implementations sit essentially *on* the knee — 31.51 against a ridge of 30.91 is a
+2% margin against a quantity with ±35% uncertainty — so this hardware cannot settle
+whether naive attention is memory-bound. It is balanced, and which side it lands on
+depends on how warm the machine is.
+
+What the noise cannot touch is the fused point: 2048 FLOP/byte is 66× the ridge, and
+no thermal drift moves that. Fusion relocates the problem to the compute side by two
+orders of magnitude. The direct evidence in §4 and §5 — the 37.95× latency inversion
+and the OOM — is also independent of any ridge point.
 
 Note the naive AI barely moves with `N` (31.51 at 4096, 31.75 at 8192, 31.88 at
 16384) and asymptotes at `4·D/(2·e) = 32`. It is a constant, independent of

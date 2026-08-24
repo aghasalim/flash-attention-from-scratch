@@ -1,7 +1,7 @@
 # Use the repo venv for everything. Override with `make PY=/some/other/python test`.
 PY ?= $(CURDIR)/.venv/bin/python
 
-.PHONY: setup env test bench profile lint fmt fmt-check clean
+.PHONY: setup env test bench profile lint fmt fmt-check check-numbers clean
 
 setup:
 	$(PY) -m pip install -e .
@@ -38,6 +38,9 @@ profile:
 # separate target on purpose: it wants ~440 lines of pure re-wrapping, no
 # semantic change, so having `make lint` fail on it would leave a red target
 # that disagrees with a green CI. Run `make fmt` when you actually want it.
+check-numbers:
+	$(PY) scripts/check_numbers.py
+
 lint:
 	@if $(PY) -m ruff --version >/dev/null 2>&1; then \
 		$(PY) -m ruff check . ; \
