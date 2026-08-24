@@ -45,6 +45,10 @@ extend-exclude = ["prompts"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B"]
+# E501 off: the long lines left are docstring prose and measured-number tables in
+# bench/ and scripts/, where wrapping costs more readability than it buys.
+# B905 off: the zip() is over two slices of the same list, so strict= adds nothing.
+ignore = ["E501", "B905"]
 
 [tool.mypy]
 python_version = "3.10"

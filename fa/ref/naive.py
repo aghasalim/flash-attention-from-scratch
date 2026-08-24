@@ -147,7 +147,7 @@ class _Report:
         }
 
 
-@functools.lru_cache(maxsize=None)
+@functools.cache
 def sdpa_report(device: str, dtype: torch.dtype = torch.float16) -> _Report:
     """Probe which SDPA backends actually run here, and whether the choice is honoured.
 
