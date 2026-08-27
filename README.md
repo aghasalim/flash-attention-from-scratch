@@ -118,16 +118,14 @@ Five, in descending order of how much they should have embarrassed me.
 Full detail in [notes/METHODS.md](notes/METHODS.md#7-errors-worth-recording).
 ## 8. References
 
-Milakov and Gimelshein, *Online normalizer calculation for softmax* (2018), is the
-two-page result the whole construction rests on. Rabe and Staats, *Self-attention
-Does Not Need O(n²) Memory* (2021), gives the memory result without the IO framing;
-`chunked_attention` here is essentially their construction, and §2 is the measurement
-of why that is not sufficient. Dao, Fu, Ermon, Rudra and Ré, *FlashAttention* (2022),
-adds the IO-awareness that makes the difference, with the complexity argument in §3.2.
-Dao, *FlashAttention-2* (2023), covers work partitioning and the loop ordering the
-NumPy reference is written in. Shah et al., *FlashAttention-3* (2024), addresses
-Hopper-specific warp specialisation and FP8. Kwon et al., *PagedAttention* (2023), is
-the basis for the paged-cache task.
+Each paper is listed because the implementation follows it, not as background reading.
+
+- **Milakov, Gimelshein. Online normalizer calculation for softmax. 2018.** [arXiv:1805.02867](https://arxiv.org/abs/1805.02867) The two page result the whole construction rests on.
+- **Rabe, Staats. Self-attention Does Not Need O(n^2) Memory. 2021.** [arXiv:2112.05682](https://arxiv.org/abs/2112.05682) The memory result without the IO framing. `chunked_attention` here is essentially their construction, and section 2 measures why that is not sufficient on its own.
+- **Dao, Fu, Ermon, Rudra, Ré. FlashAttention: Fast and Memory-Efficient Exact Attention with IO-Awareness. NeurIPS 2022.** [arXiv:2205.14135](https://arxiv.org/abs/2205.14135) The IO-awareness that makes the difference, with the complexity argument in its section 3.2.
+- **Dao. FlashAttention-2: Faster Attention with Better Parallelism and Work Partitioning. 2023.** [arXiv:2307.08691](https://arxiv.org/abs/2307.08691) Work partitioning, and the loop ordering the NumPy reference is written in.
+- **Shah, Bikshandi, Zhang et al. FlashAttention-3: Fast and Accurate Attention with Asynchrony and Low-precision. NeurIPS 2024.** [arXiv:2407.08608](https://arxiv.org/abs/2407.08608) Hopper warp specialisation and FP8. Out of reach without that hardware, and not measured here.
+- **Kwon, Li, Zhuang et al. Efficient Memory Management for Large Language Model Serving with PagedAttention. SOSP 2023.** [arXiv:2309.06180](https://arxiv.org/abs/2309.06180) The block table design behind the paged cache task.
 
 ## Author
 
