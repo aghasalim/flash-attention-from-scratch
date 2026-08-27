@@ -1,0 +1,22 @@
+cff-version: 1.2.0
+message: If you use this work, please cite it as below.
+title: "Flash Attention from scratch: IO-aware attention, measured"
+abstract: "A from-scratch implementation of IO-aware attention with an online-softmax proof, a 500-test correctness harness written before the kernel, and a measured roofline analysis."
+type: software
+authors:
+  - family-names: Mustafazada
+    given-names: Aghasalim
+    orcid: "https://orcid.org/0009-0001-8746-4582"
+    affiliation: "Howest University of Applied Sciences"
+repository-code: "https://github.com/aghasalim/flash-attention-from-scratch"
+url: "https://aghasalim.github.io/"
+license: MIT
+date-released: "2026-08-27"
+version: "1.0.0"
+keywords:
+  - attention
+  - GPU kernels
+  - roofline analysis
+  - online softmax
+  - Triton
+  - CUDA
