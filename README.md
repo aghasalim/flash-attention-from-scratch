@@ -197,8 +197,8 @@ survived for several hours.
 
 ## 5. Method and structure
 
-The work is organised as twelve task specifications in [`prompts/`](prompts/), with
-a dependency graph and a file-ownership contract in [`AGENTS.md`](AGENTS.md).
+The work is organised into waves, each one verifiable on its own before the next
+depends on it. The rules every wave follows are in [`METHODOLOGY.md`](METHODOLOGY.md).
 
 ```
 fa/ref/        fp64 ground truth; naive, chunked and backend-forced SDPA baselines;
