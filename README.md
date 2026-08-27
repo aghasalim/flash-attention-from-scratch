@@ -1,5 +1,10 @@
 # flash-attention-from-scratch
 
+[![ci](https://github.com/aghasalim/flash-attention-from-scratch/actions/workflows/ci.yml/badge.svg)](https://github.com/aghasalim/flash-attention-from-scratch/actions/workflows/ci.yml)
+[![python](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/)
+[![license](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+[![results](https://img.shields.io/badge/results-reproducible-1a9850.svg)](results/)
+
 A from-scratch implementation of IO-aware attention, built to check whether the
 standard claim about it, that attention is bound by memory bandwidth rather than
 arithmetic, actually holds on hardware I can measure.
