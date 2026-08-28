@@ -21,7 +21,7 @@ the balance point, not clearly to the memory side of it. Thermal variance puts t
 ridge anywhere in 20.08 to 40.55, and 31.51 is inside that band, so **this hardware
 cannot decisively call naive attention memory-bound** (§4.3). What survives the
 noise by a wide margin is the comparison that actually matters: a fused
-implementation that never writes`S` and`P` to memory sits at 2048 FLOP/byte, 66×
+implementation that never writes `S` and `P` to memory sits at 2048 FLOP/byte, 66×
 the ridge, and the memory cliff at N=4096 is a 37.95× latency inversion with an
 OOM 1024 tokens later. The online-softmax recurrence is exact,
 verified to 7.216e-16 against a direct fp64 computation, so any error a kernel
@@ -35,14 +35,14 @@ extrapolated to hardware that was not measured.
 
 ## 1. Background: why anyone fuses attention
 
-Standard attention computes`S = QKᵀ/√d`,`P = softmax(S)`,`O = PV`. The two
-matmuls are`4·B·H·N²·D` FLOPs. The problem is not the FLOPs, it is that`S` and
-`P` are each`B·H·N²` elements that get written to memory and read back, purely as
+Standard attention computes `S = QKᵀ/√d`, `P = softmax(S)`, `O = PV`. The two
+matmuls are `4·B·H·N²·D` FLOPs. The problem is not the FLOPs, it is that `S` and
+`P` are each `B·H·N²` elements that get written to memory and read back, purely as
 intermediates the caller never wants.
 
-The ratio of score traffic to parameter traffic is`N/D`. At`D=64` the scores
-pass everything else at`N=64`, and by`N=4096` they are 32× the traffic of`Q`,
-`K`,`V` and`O` combined (§4.2). Fusing softmax into the matmul so that`S` and
+The ratio of score traffic to parameter traffic is `N/D`. At `D=64` the scores
+pass everything else at `N=64`, and by `N=4096` they are 32× the traffic of `Q`,
+`K`, `V` and `O` combined (§4.2). Fusing softmax into the matmul so that `S` and
 `P` never leave the chip removes that term entirely.
 
 This is a well-known argument. The point of §4 is that I did not want to take it
@@ -52,13 +52,13 @@ on faith, and it is measurable on hardware I own.
 
 ### 2.1 Online softmax
 
-Safe softmax subtracts the row max:`softmax(x)_i = exp(x_i − m)/Σ_j exp(x_j − m)`,
-`m = max(x)`. The shift is not optional, fp16 tops out at 65504 and`exp(12)`
+Safe softmax subtracts the row max: `softmax(x)_i = exp(x_i − m)/Σ_j exp(x_j − m)`,
+`m = max(x)`. The shift is not optional, fp16 tops out at 65504 and `exp(12)`
 already overflows it, while attention scores routinely exceed that magnitude at
-large`d`.
+large `d`.
 
-The streaming form processes one block at a time, carrying a running max`m` and
-running sum`l`. For block`j` with block statistics`m̃_j`,`l̃_j`:
+The streaming form processes one block at a time, carrying a running max `m` and
+running sum `l`. For block `j` with block statistics `m̃_j`, `l̃_j`:
 
 ```
 m_j = max(m_{j-1}, m̃_j)
@@ -68,7 +68,7 @@ O_j = exp(m_{j-1} − m_j)·O_{j-1} + exp(m̃_j − m_j)·(P̃_j V_j)
 
 `O_T / l_T` equals the true attention output **exactly** in exact arithmetic; the
 induction proof is in [`notes/01-online-softmax.md`](01-online-softmax.md). The
-correction factor`exp(m_{j-1} − m_j) ≤ 1` always, since`m_j ≥ m_{j-1}` by
+correction factor `exp(m_{j-1} − m_j) ≤ 1` always, since `m_j ≥ m_{j-1}` by
 construction, the rescale only ever shrinks, so the recurrence cannot overflow.
 
 This matters more than it looks. Because the algorithm is exact, any discrepancy a
@@ -78,33 +78,33 @@ debugging a kernel.
 
 ### 2.2 IO complexity
 
-Standard attention needs`Θ(N·d + N²)` HBM accesses. Tiled attention with SRAM of
-size`M` needs`Θ(N²d²/M)`. The`d²/M` arises from the number of KV blocks times
-the passes over`Q`. The FLOP count is unchanged; only the traffic moves. It is an
-improvement exactly when`M ≫ d²`, which is the regime real accelerators are in.
+Standard attention needs `Θ(N·d + N²)` HBM accesses. Tiled attention with SRAM of
+size `M` needs `Θ(N²d²/M)`. The `d²/M` arises from the number of KV blocks times
+the passes over `Q`. The FLOP count is unchanged; only the traffic moves. It is an
+improvement exactly when `M ≫ d²`, which is the regime real accelerators are in.
 
 ### 2.3 Backward, derived but not implemented
 
-Forward saves only`O` and the per-row logsumexp`L = m + log(l)`, one float per
-row instead of an`N×N` matrix. Backward recomputes`S` from`Q`,`K` and
-reconstructs`P = exp(S − L)`; no running max is needed because`L` already
-contains it. With`D = rowsum(dO ∘ O)`:
+Forward saves only `O` and the per-row logsumexp `L = m + log(l)`, one float per
+row instead of an `N×N` matrix. Backward recomputes `S` from `Q`, `K` and
+reconstructs `P = exp(S − L)`; no running max is needed because `L` already
+contains it. With `D = rowsum(dO ∘ O)`:
 
 ```
 dV = Pᵀ dO      dP = dO Vᵀ      dS = P ∘ (dP − D)
 dQ = dS K·scale                 dK = dSᵀ Q·scale
 ```
 
-The softmax Jacobian`∂p_i/∂s_j = p_i(δ_ij − p_j)` is`N×N` per row, but
-contracting it against`dP` collapses to an elementwise product and one row
-reduction, which is the only reason the backward pass is tractable at all.`dQ`
-and`dK` carry the`sm_scale` factor and`dV` does not; that asymmetry produces
+The softmax Jacobian `∂p_i/∂s_j = p_i(δ_ij − p_j)` is `N×N` per row, but
+contracting it against `dP` collapses to an elementwise product and one row
+reduction, which is the only reason the backward pass is tractable at all. `dQ`
+and `dK` carry the `sm_scale` factor and `dV` does not; that asymmetry produces
 gradients wrong by a constant if missed, which passes inspection and fails
 gradcheck.
 
-Five matmuls of the same shape gives`10·B·H·N²·D`, i.e. **2.5× forward**. This is
+Five matmuls of the same shape gives `10·B·H·N²·D`, i.e. **2.5× forward**. This is
 the analytic target a backward implementation has to land near. It is not measured
-here:`not measured on this hardware (no CUDA device; developed on Apple M4)`.
+here: `not measured on this hardware (no CUDA device; developed on Apple M4)`.
 
 ## 3. Implementation
 
@@ -129,7 +129,7 @@ inventing it.
 
 The test suite was written against the references *before* any kernel existed. A
 harness written after a kernel tends to encode that kernel's bugs as expected
-behaviour. Everything kernel-dependent is`xfail`, 192 of the 500 tests, and
+behaviour. Everything kernel-dependent is `xfail`, 192 of the 500 tests, and
 those are xfail for lack of a GPU, not for lack of a test.
 
 The comparison bar is **relative**, not absolute:
@@ -141,31 +141,31 @@ assert err_kernel <= 2.0 * err_naive
 ```
 
 An absolute tolerance is either loose enough to pass broken kernels or tight
-enough to fail correct ones, because attention's error grows with`N` and with
+enough to fail correct ones, because attention's error grows with `N` and with
 score magnitude. "No worse than the naive implementation at the same precision" is
 the only bar that survives that. The measured starting values, what any kernel
 must clear, are fp16 4.753e-04 and bf16 2.039e-03 at N=4096, D=64, non-causal.
 bf16 is 5.9× worse than fp16 on identical inputs (8 mantissa bits vs 11), which is
 why it gets its own tolerance rather than sharing one.
 
-Ground truth is fp64, never`F.scaled_dot_product_attention`. SDPA *is*
+Ground truth is fp64, never `F.scaled_dot_product_attention`. SDPA *is*
 FlashAttention; if the kernel and SDPA shared a bug it would be invisible.
 
 ### 3.3 What does not exist
 
 Tasks 03 (Triton forward), 05 (backward), 06 (causal/masks), 07 (autotune), 08
 (GQA/varlen/dropout), 09 (Flash-Decoding/paged), 10 (CUDA C++) are not
-implemented.`pip install triton` on macOS returns *No matching distribution
-found*, there is no darwin wheel, and there is no NVIDIA GPU, nvcc or`ncu`
+implemented. `pip install triton` on macOS returns *No matching distribution
+found*, there is no darwin wheel, and there is no NVIDIA GPU, nvcc or `ncu`
 here. Writing kernels that cannot be compiled or tested would produce six files
 that look finished and are unverified, which the project's own rule 3 (*measured
 or absent*) forbids.
 
 ## 4. Evaluation
 
-Config throughout:`B=4, H=32, D=64`. MPS rows are fp16, CPU rows are fp32 (arm64
+Config throughout: `B=4, H=32, D=64`. MPS rows are fp16, CPU rows are fp32 (arm64
 torch has no fast half GEMM: 3.3 GFLOP/s vs 1652, a 500× gap that would measure
-the dispatch path). 92 rows in`results/roofline.csv`, 834.6 s sweep.
+the dispatch path). 92 rows in `results/roofline.csv`, 834.6 s sweep.
 
 ### 4.1 The machine
 
@@ -185,11 +185,11 @@ ridge-point uncertainty comes from peak compute.
 
 CUDA equivalents, HBM bandwidth, tensor-core TFLOP/s, SM count, measured-vs-
 advertised ratio: `not measured on this hardware (no CUDA device; developed on
-Apple M4)`.
+Apple M4) `.
 
 ### 4.2 The byte argument, arithmetically
 
-fp16,`B=4 H=32 D=64`:
+fp16, `B=4 H=32 D=64`:
 
 | N | Q,K,V,O | S,P | ratio |
 |---:|---:|---:|---:|
@@ -220,11 +220,11 @@ thermal drift moves that. And the roofline is not the only evidence: §4.4's 37.
 latency inversion and §4.5's OOM are direct measurements that do not depend on a
 ridge point at all.
 
-Naive's AI is essentially constant in`N` (31.51 → 31.75 → 31.88 across a 4× range)
-and asymptotes at`4D/2e = 32`. Longer sequences do not make naive attention more
+Naive's AI is essentially constant in `N` (31.51 → 31.75 → 31.88 across a 4× range)
+and asymptotes at `4D/2e = 32`. Longer sequences do not make naive attention more
 compute-dense; they only make it move more bytes. That asymptote is a property of
-the algorithm and`D`, not of the machine, and it is why the comparison against a
-*fused* implementation is the load-bearing one:`D=64` fixes unfused attention near
+the algorithm and `D`, not of the machine, and it is why the comparison against a
+*fused* implementation is the load-bearing one: `D=64` fixes unfused attention near
 32 FLOP/byte on any hardware, so whether that is memory-bound is entirely a
 question about the machine's balance point.
 
@@ -241,19 +241,19 @@ MPS fp16, non-causal, median:
 | 8192 | OOM | 4785.5 ms |, |
 | 16384 | OOM | 32669.5 ms |, |
 
-Latency tracks`N²` exactly while it fits (ratios 3.84×, 4.04× for successive
+Latency tracks `N²` exactly while it fits (ratios 3.84×, 4.04× for successive
 doublings), then naive goes from 174 ms to 46.5 s, a 267× jump for 4× the work,
 as 8 GiB of score traffic stops fitting the 17.76 GiB working set and the run goes
 to swap. Peak for that config is 21.7 GB.
 
 ### 4.5 OOM threshold: the prediction was wrong, and usefully so
 
-Ladder in steps of 256: last OK`N=4864`, first OOM`N=5120`.
+Ladder in steps of 256: last OK `N=4864`, first OOM `N=5120`.
 
-The textbook model counts two`N²` tensors (`S`,`P`) against the budget and
-predicts`N≈6103`, **+19.2%, outside the 15% acceptance bar**. Rather than widen
-the bar: one fp16`N²` tensor at N=5120 is 6.25 GiB, and the allocator reported
-19.75 GiB in flight at failure, implying **~3.16 concurrent`N²` tensors**.
+The textbook model counts two `N²` tensors (`S`, `P`) against the budget and
+predicts `N≈6103`, **+19.2%, outside the 15% acceptance bar**. Rather than widen
+the bar: one fp16 `N²` tensor at N=5120 is 6.25 GiB, and the allocator reported
+19.75 GiB in flight at failure, implying **~3.16 concurrent `N²` tensors**.
 
 | model | predicted N | vs first OOM |
 |---|---:|---:|
@@ -261,14 +261,14 @@ the bar: one fp16`N²` tensor at N=5120 is 6.25 GiB, and the allocator reported
 | **3 tensors** | **4983** | **−2.7%** |
 | 4 tensors | 4315 | −15.7% |
 
-The third tensor is the`masked_fill` allocation, held alongside`S` and`P` in
+The third tensor is the `masked_fill` allocation, held alongside `S` and `P` in
 the autograd graph. The textbook byte model under-counts any real implementation
 by exactly the intermediates the framework materialises.
 
 ## 5. Ablations
 
 Every cell is measured on this machine or explicitly absent. Command for each is
-in`notes/LOGBOOK.md`.
+in `notes/LOGBOOK.md`.
 
 | ablation | config | result | note |
 |---|---|---|---|
@@ -280,9 +280,9 @@ in`notes/LOGBOOK.md`.
 | **causal block skipping** | N=4096 | 1.89× (sdpa) vs 0.93× (chunked) | same shape at 4× shorter context |
 | block-order invariance | N=512, 20 perms | 2.220e-16 | confirms the recurrence is order-independent |
 | backward: atomic vs split kernels |, |`not measured on this hardware (no CUDA device; developed on Apple M4)` | task 05 |
-|`exp2` vs`exp` |, |`not measured on this hardware (no CUDA device; developed on Apple M4)` | task 03 |
+|`exp2` vs `exp` |, |`not measured on this hardware (no CUDA device; developed on Apple M4)` | task 03 |
 | BLOCK_M / BLOCK_N / num_stages / num_warps sweeps |, |`not measured on this hardware (no CUDA device; developed on Apple M4)` | task 07 |
-| smem swizzling,`cp.async` |, |`not measured on this hardware (no CUDA device; developed on Apple M4)` | task 10 |
+| smem swizzling, `cp.async` |, |`not measured on this hardware (no CUDA device; developed on Apple M4)` | task 10 |
 | Flash-Decoding vs standard |, |`not measured on this hardware (no CUDA device; developed on Apple M4)` | task 09 |
 | GQA vs MHA KV memory |, |`not measured on this hardware (no CUDA device; developed on Apple M4)` | task 08 |
 | varlen vs padded |, |`not measured on this hardware (no CUDA device; developed on Apple M4)` | task 08 |
@@ -291,11 +291,11 @@ in`notes/LOGBOOK.md`.
 
 The interesting row is causal skipping, because it is measurable *without* writing
 a kernel, by comparing implementations that skip against ones that do not.
-`naive` and`chunked` compute the full`N²` and mask afterwards; under causal they
+`naive` and `chunked` compute the full `N²` and mask afterwards; under causal they
 run at **0.91 to 0.98×**, i.e. slightly slower, since masking is extra work for
 identical traffic. The SDPA path, which classifies blocks and skips the
 fully-hidden ones, runs at **1.69 to 2.02×**, approaching the theoretical 2× and
-getting closer as`N` grows and the diagonal becomes a smaller fraction of the
+getting closer as `N` grows and the diagonal becomes a smaller fraction of the
 triangle. That gap *is* the value of block skipping, isolated.
 
 ## 6. Limitations
@@ -315,8 +315,8 @@ triangle. That gap *is* the value of block skipping, isolated.
 - **The ridge point is noisy enough to change a conclusion.** ±35% on peak
   compute, from thermal throttling. Any single-run roofline verdict near the knee
   on this machine should be distrusted.
-- **`sdpa_kernel` is a no-op on MPS.** Forcing a backend silently does nothing`sdpa_backend_honored=False` in the CSV. The "sdpa" rows are whatever kernel the
-  device chose, and are labelled`NOT HONORED` rather than reported as a MATH
+- **`sdpa_kernel` is a no-op on MPS.** Forcing a backend silently does nothing `sdpa_backend_honored=False` in the CSV. The "sdpa" rows are whatever kernel the
+  device chose, and are labelled `NOT HONORED` rather than reported as a MATH
   measurement. On CPU the same probe correctly raises.
 - **No per-config peak memory on CPU.** torch exposes no resettable per-device
   peak allocator stat there.
@@ -331,13 +331,13 @@ triangle. That gap *is* the value of block skipping, isolated.
 - **Milakov & Gimelshein (2018)**, *Online normalizer calculation for softmax*
   the two-page result the whole thing rests on. §2.1 is this.
 - **Rabe & Staats (2021)**, *Self-attention Does Not Need O(n²) Memory*, the
-  memory result without the IO framing. This repo's`chunked_attention` is
+  memory result without the IO framing. This repo's `chunked_attention` is
   essentially their construction, and §4.4 shows it buys memory and not bandwidth.
 - **Dao et al. (2022)**, *FlashAttention*, adds IO-awareness: the point is not
-  just avoiding the`N²` allocation but avoiding the`N²` *traffic*. §4.3 is the
+  just avoiding the `N²` allocation but avoiding the `N²` *traffic*. §4.3 is the
   measurement of that distinction.
 - **Dao (2023)**, *FlashAttention-2*, work partitioning, and the outer-Q /
-  inner-KV loop order that`fa/ref/online_softmax.py` is written in.
+  inner-KV loop order that `fa/ref/online_softmax.py` is written in.
 - **Shah et al. (2024)**, *FlashAttention-3*, warp specialisation, FP8, Hopper.
   Out of reach without an H100.
 - **Kwon et al. (2023)**, *PagedAttention/vLLM*, task 09's block-table design.
@@ -353,11 +353,11 @@ produces tests that agree with whatever the kernel does.
 CUDA box throughout. Discovering at task 00 that 8 of 12 tasks were unrunnable
 should have happened before the specs were written, not after.
 
-**I trusted`sdpa_kernel` without verifying it was honored.** It failed silently
+**I trusted `sdpa_kernel` without verifying it was honored.** It failed silently
 and plausibly. Four columns of the CSV would have carried "MATH backend" numbers
 that were nothing of the sort. The general lesson, verify that a knob you turned
 actually did something, is the same one behind the fresh-clone check that later
-found an undeclared scipy dependency and a`make lint` target that disagreed with
+found an undeclared scipy dependency and a `make lint` target that disagreed with
 CI.
 
 **I had the value of tiling backwards.** I expected chunking to be the win and it
@@ -371,7 +371,7 @@ IO-complexity argument, the correctness-bar design and the roofline analysis are
 things I understand and could reproduce on a whiteboard. The backward derivation
 in §2.3 I have worked through on paper but never debugged in code, which is a
 weaker form of knowing. The kernel engineering, shared-memory layout, bank
-conflicts,`cp.async` pipelining, register pressure, I have read about and not
+conflicts, `cp.async` pipelining, register pressure, I have read about and not
 done, and I would not claim otherwise.
 
 The next thing to build is task 03 on rented hardware, against the 192 tests that
