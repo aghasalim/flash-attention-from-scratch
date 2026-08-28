@@ -63,11 +63,13 @@ def roofline(out: Path) -> Path:
     table = sweep()
     table = table[table.status == "ok"]
     hardware = json.loads((REPO / "hardware.json").read_text())
+    def peak_of(dtype: str, device: str) -> tuple[float, float, float]:
+        m = hardware["dtypes"][dtype][device]["matmul"]
+        return m["gflop_s"], m["gflop_s_worst"], m["gflop_s_best"]
+
     peaks = {
-        "mps": (hardware["dtypes"]["fp16"]["mps"]["matmul"]["gflop_s"],
-                hardware["bandwidth"]["mps"]["gb_per_s"], "fp16"),
-        "cpu": (hardware["dtypes"]["fp32"]["cpu"]["matmul"]["gflop_s"],
-                hardware["bandwidth"]["cpu"]["gb_per_s"], "fp32"),
+        "mps": (*peak_of("fp16", "mps"), hardware["bandwidth"]["mps"]["gb_per_s"], "fp16"),
+        "cpu": (*peak_of("fp32", "cpu"), hardware["bandwidth"]["cpu"]["gb_per_s"], "fp32"),
     }
     devices = [d for d in ("mps", "cpu") if (table.device == d).any()]
     markers = {"naive": "o", "chunked": "s", "sdpa": "^"}
@@ -75,19 +77,26 @@ def roofline(out: Path) -> Path:
     figure, axes = plt.subplots(1, len(devices), figsize=(6.5 * len(devices), 5.2),
                                 squeeze=False)
     for axis, device in zip(axes[0], devices, strict=True):
-        peak, bandwidth, dtype = peaks[device]
+        peak, peak_lo, peak_hi, bandwidth, dtype = peaks[device]
         ridge = peak / bandwidth
-        # Span the roof over the intensities this device actually reached, so the
-        # panel is not mostly empty axis on the CPU side, where the sweep stops at
-        # N=4096 and the intensities only reach a fraction of the MPS range.
+        # A little past the intensities this device actually reached at each end, so
+        # the roof reads as a line rather than stopping dead on the outermost point.
         intensity = table[table.device == device].arithmetic_intensity_flop_per_byte
         xs = np.geomspace(intensity.min() / 6, intensity.max() * 6, 200)
+        # The matmul peak is not one number. Within a single fingerprint run it moves
+        # with thermal state, and hardware.json records that spread, so the roof is
+        # drawn as the band it actually is. Points above the median roof but inside
+        # the band are not impossible, they were measured when the machine was cool.
+        axis.fill_between(xs, [min(peak_lo, bandwidth * x) for x in xs],
+                          [min(peak_hi, bandwidth * x) for x in xs],
+                          color="#333333", alpha=0.10, linewidth=0,
+                          label=f"roof spread with thermal state: {peak_lo:.0f} to {peak_hi:.0f} GFLOP/s")
         axis.plot(xs, [min(peak, bandwidth * x) for x in xs], color="#333333", lw=1.6,
                   label=f"roof: min({peak:.0f} GFLOP/s, {bandwidth:.1f} GB/s x AI)")
         axis.axvline(ridge, color="#999999", ls=":", lw=1.2)
         # Blended transform so the label sits on the axis floor whatever the data
         # does, instead of landing on top of a cluster of points.
-        axis.text(ridge * 1.15, 0.02, f"ridge {ridge:.1f} FLOP/byte", rotation=90,
+        axis.text(ridge * 1.15, 0.40, f"ridge {ridge:.1f} FLOP/byte", rotation=90,
                   transform=axis.get_xaxis_transform(), ha="left", va="bottom",
                   fontsize=8.6, color="#5a5a5a")
         for impl, colour in IMPL_COLOURS.items():
@@ -107,8 +116,17 @@ def roofline(out: Path) -> Path:
                     bandwidth * xs[0]) / 5
         axis.set_ylim(bottom=floor)
         axis.set_xlabel("arithmetic intensity (analytic FLOP per analytic HBM byte)")
-        axis.set_ylabel("achieved GFLOP/s (executed FLOPs / median latency)")
-        titled(axis, f"{device.upper()}, {dtype}",
+        axis.set_ylabel("achieved GFLOP/s (required FLOPs / median latency)")
+        rows_dev = table[table.device == device]
+        best = rows_dev.loc[rows_dev.achieved_gflop_s.astype(float).idxmax()]
+        best_rate = float(best.achieved_gflop_s)
+        # Only say something reaches the roof if it actually got inside the band the
+        # peak occupies. Otherwise say how far short the best one fell.
+        if best_rate >= peak_lo:
+            claim = f"{best.impl} reaches the roof, the other two do not"
+        else:
+            claim = f"nothing reaches the roof, {best.impl} gets to {best_rate / peak:.0%} of it"
+        titled(axis, f"{device.upper()}, {dtype}: {claim}",
                "one point per sweep configuration, causal and non-causal, B=4 H=32 D=64")
         axis.legend(loc="lower right", fontsize=8.6)
 
