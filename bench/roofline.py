@@ -2,9 +2,9 @@
 
     .venv/bin/python -m bench.roofline
 
-Writes ``results/roofline.csv`` and ``results/roofline.png``. Every number in the CSV
-comes from a run this script performed; nothing is estimated and nothing is copied
-from a paper.
+Writes ``results/roofline.csv``. Every number in the CSV comes from a run this script
+performed; nothing is estimated and nothing is copied from a paper. The figure is
+drawn from that CSV by ``bench/figures.py``, so this script only measures.
 
 **This machine has no CUDA device** (Apple M4, see ``HARDWARE.md``). Everything below
 is measured on MPS (Apple GPU) or the CPU and is labelled as such in the ``device``
@@ -27,7 +27,6 @@ Deviations from the task grid, all deliberate and all recorded in the CSV:
 from __future__ import annotations
 
 import csv
-import json
 import math
 import statistics
 import threading
@@ -486,70 +485,6 @@ def check_correctness() -> None:
     print("        within 2x the naive-in-this-dtype error against the same fp64 reference.\n")
 
 
-# ------------------------------------------------------------------------- plotting
-
-
-def plot(rows: list[Row]) -> Path:
-    import matplotlib
-
-    matplotlib.use("Agg")
-    import matplotlib.pyplot as plt
-
-    hw = json.loads((REPO / "hardware.json").read_text())
-    peaks = {
-        "mps": (hw["dtypes"]["fp16"]["mps"]["matmul"]["gflop_s"], hw["bandwidth"]["mps"]["gb_per_s"], "fp16"),
-        "cpu": (hw["dtypes"]["fp32"]["cpu"]["matmul"]["gflop_s"], hw["bandwidth"]["cpu"]["gb_per_s"], "fp32"),
-    }
-    devices = [d for d in ("mps", "cpu") if any(r.device == d and r.status == "ok" for r in rows)]
-    fig, axes = plt.subplots(1, len(devices), figsize=(7.2 * len(devices), 5.6), squeeze=False)
-
-    markers = {"naive": "o", "chunked": "s", "sdpa": "^"}
-    colors = {"naive": "#c1440e", "chunked": "#1f6f8b", "sdpa": "#2e7d32"}
-
-    for ax, device in zip(axes[0], devices):
-        peak, bw, dt = peaks[device]
-        ridge = peak / bw
-        x = [2.0**e for e in range(-1, 12)]
-        ax.plot(x, [min(peak, bw * xi) for xi in x], color="k", lw=1.6, label=f"roofline: min({peak:.0f} GFLOP/s, {bw:.1f} GB/s x AI)")
-        ax.axvline(ridge, color="k", ls=":", lw=1.2)
-        ax.annotate(
-            f"ridge {ridge:.1f} FLOP/byte",
-            xy=(ridge, peak * 0.06),
-            rotation=90,
-            va="bottom",
-            ha="right",
-            fontsize=8,
-        )
-        for impl in ("naive", "chunked", "sdpa"):
-            pts = [r for r in rows if r.phase == "sweep" and r.device == device and r.impl == impl and r.status == "ok"]
-            if not pts:
-                continue
-            ax.scatter(
-                [r.arithmetic_intensity_flop_per_byte for r in pts],
-                [r.achieved_gflop_s for r in pts],
-                marker=markers[impl], color=colors[impl], s=44,
-                label=f"{impl} (N={min(r.N for r in pts)}..{max(r.N for r in pts)}, causal F+T)",
-                alpha=0.85, edgecolors="white", linewidths=0.5,
-            )
-        ax.set_xscale("log")
-        ax.set_yscale("log")
-        ax.set_xlabel("arithmetic intensity  (analytic FLOP / analytic HBM byte)")
-        ax.set_ylabel("achieved GFLOP/s (executed FLOPs / measured median latency)")
-        ax.set_title(f"{device.upper()} / {dt} -- Apple M4, measured {hw['measured_at']}")
-        ax.grid(True, which="both", alpha=0.25, lw=0.4)
-        ax.legend(fontsize=7, loc="lower right")
-
-    fig.suptitle(
-        "Attention roofline on Apple M4 (no CUDA device: CUDA roofline " + NOT_MEASURED + ")",
-        fontsize=9,
-    )
-    fig.tight_layout()
-    out = RESULTS / "roofline.png"
-    fig.savefig(out, dpi=160)
-    plt.close(fig)
-    return out
-
-
 def main() -> int:
     RESULTS.mkdir(exist_ok=True)
     print(f"torch {torch.__version__} | cuda {torch.cuda.is_available()} | mps {torch.backends.mps.is_available()}")
@@ -568,8 +503,8 @@ def main() -> int:
         writer.writeheader()
         for row in rows:
             writer.writerow(asdict(row))
-    png_path = plot(rows)
-    print(f"wrote {csv_path}\nwrote {png_path}")
+    print(f"wrote {csv_path}")
+    print("figure: .venv/bin/python -m bench.figures draws results/roofline.png from it")
     return 0
 
 
