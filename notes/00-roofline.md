@@ -15,7 +15,8 @@ Reproduce with:
 
 ```bash
 .venv/bin/python -m scripts.env        # writes HARDWARE.md, hardware.json
-.venv/bin/python -m bench.roofline     # writes results/roofline.csv, results/roofline.png
+.venv/bin/python -m bench.roofline     # writes results/roofline.csv
+.venv/bin/python -m bench.figures      # draws the figures from that CSV
 ```
 
 Config throughout:`B=4, H=32, D=64`. Sweep wall clock 834.6 s, 92 rows in

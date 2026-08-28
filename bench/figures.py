@@ -1,11 +1,10 @@
 """Draw the README figures from the committed result CSVs.
 
-``bench.roofline`` writes ``results/roofline.png`` itself. These cover what that
-plot cannot show: how latency scales, where naive runs out of memory, what the OOM
-ladder found, what fusion buys on the CPU, what fp16 accumulators cost, and how much
-causal block-skipping is worth. One animation is included as well, and it is a
-schematic of the algorithm rather than a measurement; it is labelled as such in the
-frame and in its caption.
+Every figure in the README is drawn here: the roofline, how latency scales, where
+naive runs out of memory, what the OOM ladder found, what fusion buys on the CPU,
+what fp16 accumulators cost, and how much causal block-skipping is worth. One
+animation is included as well, and it is a schematic of the algorithm rather than a
+measurement; it is labelled as such in the frame and in its caption.
 
 Reads saved CSVs only, nothing is re-measured here, so the figures always match the
 numbers the write-ups quote. The one exception is the animation, which runs the
@@ -53,6 +52,76 @@ def sweep() -> pd.DataFrame:
     return table[table.phase == "sweep"]
 
 
+def roofline(out: Path) -> Path:
+    """Where each implementation lands against this machine's roof.
+
+    The measurement lives in bench/roofline.py. This reads the CSV that script
+    wrote and the peaks scripts/env.py measured, so the picture cannot drift away
+    from either. The roof is min(matmul peak, bandwidth x arithmetic intensity),
+    and the ridge is where those two meet.
+    """
+    table = sweep()
+    table = table[table.status == "ok"]
+    hardware = json.loads((REPO / "hardware.json").read_text())
+    peaks = {
+        "mps": (hardware["dtypes"]["fp16"]["mps"]["matmul"]["gflop_s"],
+                hardware["bandwidth"]["mps"]["gb_per_s"], "fp16"),
+        "cpu": (hardware["dtypes"]["fp32"]["cpu"]["matmul"]["gflop_s"],
+                hardware["bandwidth"]["cpu"]["gb_per_s"], "fp32"),
+    }
+    devices = [d for d in ("mps", "cpu") if (table.device == d).any()]
+    markers = {"naive": "o", "chunked": "s", "sdpa": "^"}
+
+    figure, axes = plt.subplots(1, len(devices), figsize=(6.5 * len(devices), 5.2),
+                                squeeze=False)
+    for axis, device in zip(axes[0], devices, strict=True):
+        peak, bandwidth, dtype = peaks[device]
+        ridge = peak / bandwidth
+        # Span the roof over the intensities this device actually reached, so the
+        # panel is not mostly empty axis on the CPU side, where the sweep stops at
+        # N=4096 and the intensities only reach a fraction of the MPS range.
+        intensity = table[table.device == device].arithmetic_intensity_flop_per_byte
+        xs = np.geomspace(intensity.min() / 6, intensity.max() * 6, 200)
+        axis.plot(xs, [min(peak, bandwidth * x) for x in xs], color="#333333", lw=1.6,
+                  label=f"roof: min({peak:.0f} GFLOP/s, {bandwidth:.1f} GB/s x AI)")
+        axis.axvline(ridge, color="#999999", ls=":", lw=1.2)
+        # Blended transform so the label sits on the axis floor whatever the data
+        # does, instead of landing on top of a cluster of points.
+        axis.text(ridge * 1.15, 0.02, f"ridge {ridge:.1f} FLOP/byte", rotation=90,
+                  transform=axis.get_xaxis_transform(), ha="left", va="bottom",
+                  fontsize=8.6, color="#5a5a5a")
+        for impl, colour in IMPL_COLOURS.items():
+            rows = table[(table.device == device) & (table.impl == impl)]
+            if rows.empty:
+                continue
+            axis.scatter(rows.arithmetic_intensity_flop_per_byte, rows.achieved_gflop_s,
+                         marker=markers[impl], color=colour, s=44, alpha=0.85,
+                         edgecolors="white", linewidths=0.5,
+                         label=f"{impl}, N={int(rows.N.min())} to {int(rows.N.max())}")
+        axis.set_xscale("log")
+        axis.set_yscale("log")
+        # Open a band under the lowest point so the legend has somewhere to sit that
+        # is not on top of the data. The legend has no frame, so an overlap here does
+        # not look like an overlap, it looks like a label attached to a point.
+        floor = min(float(table[table.device == device].achieved_gflop_s.min()),
+                    bandwidth * xs[0]) / 5
+        axis.set_ylim(bottom=floor)
+        axis.set_xlabel("arithmetic intensity (analytic FLOP per analytic HBM byte)")
+        axis.set_ylabel("achieved GFLOP/s (executed FLOPs / median latency)")
+        titled(axis, f"{device.upper()}, {dtype}",
+               "one point per sweep configuration, causal and non-causal, B=4 H=32 D=64")
+        axis.legend(loc="lower right", fontsize=8.6)
+
+    figure.tight_layout(rect=(0, 0.055, 1, 1))
+    figure.text(0.5, 0.018,
+                "Apple M4. There is no CUDA device on this machine, so no CUDA roofline "
+                "is measured. The roof comes from scripts/env.py on this machine.",
+                ha="center", fontsize=8.6, color="#5a5a5a")
+    figure.savefig(out)
+    plt.close(figure)
+    return out
+
+
 def latency_scaling(out: Path) -> Path:
     """Latency against sequence length, with the point where naive stops fitting.
 
@@ -92,17 +161,30 @@ def latency_scaling(out: Path) -> Path:
     labels = [str(n) for n in shared]
     # Stems from 1.0 rather than bars from the axis floor: on a log scale a bar
     # starts wherever the axis happens to end, which reads as a magnitude it is not.
-    for x, r in zip(labels, ratio, strict=True):
-        colour = FUSED if r > 1 else NEUTRAL
-        right.vlines(x, 1.0, r, color=colour, lw=8, alpha=0.85)
-        right.plot([x], [r], "o", color=colour, markersize=7)
-    right.axhline(1.0, color="0.35", ls="--", lw=1.2)
+    # The band below 1.0 is shaded and every stem is labelled, because on a log axis
+    # a 0.57x stub is tiny beside a 37.9x one and would otherwise read as nothing
+    # happening. Colour carries the winner: red is naive, blue is chunked, the same
+    # meaning they have in the left panel.
     right.set_yscale("log")
-    right.set_ylim(0.45, 55)
+    right.set_ylim(0.38, 90)
+    right.axhspan(0.38, 1.0, color="#f4f4f4", zorder=0)
+    for x, r in zip(labels, ratio, strict=True):
+        colour = CHUNKED if r > 1 else NAIVE
+        right.vlines(x, 1.0, r, color=colour, lw=9, alpha=0.9)
+        right.plot([x], [r], "o", color=colour, markersize=8)
+        above = r > 1
+        right.annotate(f"{r:.2f}x", xy=(x, r * (1.22 if above else 0.86)),
+                       ha="center", va="bottom" if above else "top",
+                       fontsize=9.5, color=colour)
+    right.axhline(1.0, color="0.35", ls="--", lw=1.2)
     right.set_xlabel("sequence length N (tokens)")
     right.set_ylabel("naive latency / chunked latency")
-    right.annotate("37.9x, and only because the naive run\nat this size is swapping, not computing",
-                   xy=(labels[-1], ratio[-1]), xytext=(0.30, 0.70),
+    right.text(0.44, 0.195, "chunked faster", transform=right.transAxes,
+               fontsize=9, color=CHUNKED, va="bottom")
+    right.text(0.44, 0.160, "naive faster", transform=right.transAxes,
+               fontsize=9, color=NAIVE, va="top")
+    right.annotate("and only because the naive run\nat this size is swapping, not computing",
+                   xy=(labels[-1], ratio[-1] * 0.55), xytext=(0.26, 0.62),
                    textcoords="axes fraction", fontsize=9, color="#333333",
                    arrowprops=dict(arrowstyle="->", color="#333333", lw=1.1))
     titled(right, "Chunking wins only where naive falls over",
@@ -199,12 +281,19 @@ def oom_ladder(out: Path) -> Path:
     for n, b in zip(ok.N, ok.peak_mem_bytes, strict=True):
         ax.text(str(int(n)), b / 1e9 + top * 0.02, f"{b / 1e9:.1f}",
                 ha="center", fontsize=9, color="#333333")
-    for n in failed.N:
-        # No bar height exists for this row: the allocation never completed, so
-        # there is no peak to report. Drawn as an open box to the top of the axis
-        # so it reads as "off the end", not as a measured value.
-        ax.bar(str(int(n)), top, 0.6, color="none", edgecolor=NAIVE, lw=1.6,
-               hatch="//", label="allocation refused")
+    if not failed.empty:
+        # No bar height exists for these rows: the allocation never completed, so
+        # there is no peak to report. An earlier version drew a hatched box to the
+        # top of the axis, which reads as a measured 39 GB until you notice the
+        # hatch in the legend. A refusal is not a measurement, so it gets a cross on
+        # the axis and a gap where the bar would be.
+        refused = [str(int(n)) for n in failed.N]
+        ax.plot(refused, [0] * len(refused), marker="x", ls="none", color=NAIVE,
+                markersize=13, markeredgewidth=2.6, clip_on=False, zorder=5,
+                label="allocation refused, no peak to report")
+        for x in refused:
+            ax.annotate("allocation refused\nnothing to measure", xy=(x, top * 0.045),
+                        ha="center", va="bottom", fontsize=9, color=NAIVE)
     ax.set_xlim(-0.6, len(labels) - 0.4)
     ax.set_ylim(0, top)
     ax.set_xlabel("sequence length N (tokens)")
@@ -585,6 +674,7 @@ def tiling_animation(out: Path) -> Path:
 
 def main() -> None:
     for path in (
+        roofline(RESULTS / "roofline.png"),
         latency_scaling(RESULTS / "latency-scaling.png"),
         memory(RESULTS / "memory.png"),
         oom_ladder(RESULTS / "oom-ladder.png"),

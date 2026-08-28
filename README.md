@@ -84,7 +84,8 @@ python -m scripts.env          # hardware fingerprint -> HARDWARE.md, hardware.j
 python -m pytest tests/        # 270 passed, 38 skipped, 192 xfailed (~11 s)
 python -m fa.ref.online_softmax  # exactness proof and the accumulator experiments
 python -m bench.fusion         # CPU fusion measurement -> results/fusion.csv (~5 min)
-python -m bench.roofline       # full sweep -> results/roofline.csv, .png (~14 min)
+python -m bench.roofline       # full sweep -> results/roofline.csv (~14 min)
+python -m bench.figures        # every figure above, drawn from the committed CSVs
 python scripts/check_numbers.py  # every figure above, re-derived from source data
 ```
 

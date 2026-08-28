@@ -24,7 +24,7 @@ different scale.
 CPU, fp32, `B=2 H=8 D=64`, five independent repeats with the variants interleaved;
 outputs agree with eager to 5.5e-07. Source: `results/fusion.csv`.
 
-![CPU fusion: latency and speedup with ranges](results/fusion.png)
+![CPU fusion: latency and speedup with ranges](../results/fusion.png)
 
 I first ran this once per configuration and read a speedup climbing steadily to
 4.47×, the shape the bandwidth argument predicts and the one I was pleased to see.
@@ -35,7 +35,7 @@ benefit is real; the trend I wanted to read into it was noise.
 What does hold is the level shift in throughput, which is large and stable at every
 size:
 
-![Achieved throughput as a share of measured fp32 peak](results/throughput.png)
+![Achieved throughput as a share of measured fp32 peak](../results/throughput.png)
 
 *Eager attention is pinned near 20 to 26% of peak regardless of sequence length, the
 signature of a workload waiting on memory. Fusing lifts it to between 45% and 68%.*
@@ -57,14 +57,14 @@ traffic stops fitting the 17.76 GiB working set. At that point chunked attention
 slower at every smaller size, is 37.95× faster, and naive fails outright 1024
 tokens later. Chunked, on the same sweep, reaches `N = 16384`.
 
-![Latency scaling on MPS and CPU](results/latency-scaling.png)
+![Latency scaling on MPS and CPU](../results/latency-scaling.png)
 
 Stepping `N` in increments of 256 locates the failure precisely, and shows why the
 textbook prediction missed it:
 
-![OOM ladder](results/oom-ladder.png)
+![OOM ladder](../results/oom-ladder.png)
 
-![Roofline](results/roofline.png)
+![Roofline](../results/roofline.png)
 
 **The roofline does not settle the memory-bound question on this machine, and I
 initially claimed that it did.** The ridge point is 30.91 FLOP/byte at the median,
@@ -88,7 +88,7 @@ while the SDPA path, which classifies and skips blocks, reaches 2.02× and appro
 the theoretical ceiling as `N` grows and the diagonal becomes a smaller share of the
 triangle. That gap is the entire value of block skipping, isolated.
 
-![Causal block skipping](results/causal-skipping.png)
+![Causal block skipping](../results/causal-skipping.png)
 
 **The online-softmax recurrence is exact, and I proved it rather than assuming it.**
 Verified to 7.216e-16 against direct computation in fp64, across block sizes that do
@@ -101,7 +101,7 @@ accumulation gives 1.568e-04 maximum absolute error against 4.755e-08 for fp32, 
 the denominator is 8202× worse. The relative error reaches 1.000 from `N = 1024`
 upward, meaning small probabilities come back as literal zero.
 
-![fp32 vs fp16 accumulators](results/accumulator.png)
+![fp32 vs fp16 accumulators](../results/accumulator.png)
 
 *Only the accumulator dtype differs; inputs are fp16 in both arms. The left panel is
 why max-absolute-error alone is a poor diagnostic, since it is flat in `N` because
@@ -152,7 +152,7 @@ fa/ref/        fp64 ground truth; naive, chunked and backend-forced SDPA baselin
 fa/triton/     empty, task 03 and 05-10
 fa/cuda/       empty, task 10
 tests/         500 tests; 192 xfail pending a GPU
-bench/         roofline sweep and CPU fusion measurement
+bench/         roofline sweep, CPU fusion measurement, and the figures
 notes/         derivations, the write-up, and the logbook
 results/       generated CSVs and figures, committed so the tables above reproduce
 ```
