@@ -135,14 +135,14 @@ Quantities requiring an NVIDIA GPU, namely the naive-versus-FlashAttention ratio
 against `exp`, block-size and pipeline-depth sweeps, shared-memory swizzling,
 `cp.async`, Flash-Decoding and GQA cache savings, are absent rather than estimated.
 The full ablation table, including every cell marked unmeasurable, is in
-[`notes/paper.md`](notes/paper.md).
+[`notes/paper.md`](../notes/paper.md).
 
 
 ## 5. Method and structure
 
 
 The work is organised into waves, each one verifiable on its own before the next
-depends on it. The rules every wave follows are in [`METHODOLOGY.md`](METHODOLOGY.md).
+depends on it. The rules every wave follows are in [`METHODOLOGY.md`](../METHODOLOGY.md).
 
 ```
 fa/ref/        fp64 ground truth; naive, chunked and backend-forced SDPA baselines;
@@ -168,7 +168,7 @@ reject correct ones. Ground truth is fp64 throughout and never
 `scaled_dot_product_attention`, which is itself FlashAttention and would conceal any
 bug the two implementations shared.
 
-[`notes/LOGBOOK.md`](notes/LOGBOOK.md) is the running record: what was tried, the
+[`notes/LOGBOOK.md`](../notes/LOGBOOK.md) is the running record: what was tried, the
 number before and after, and what I concluded, including the entries where the
 conclusion was wrong.
 
