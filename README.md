@@ -43,6 +43,19 @@ a number for how much it is worth on a machine I own.
 changes when the bytes move, not how many. Right: naive is the only implementation
 that fails outright, on 4 of 24 configurations.*
 
+The way out is to never build `S` at all. The scores are computed one tile at a time,
+and the only state carried from one tile to the next is a running row max `m` and a
+running row sum `l`, two floats per query row. That is the whole trick, and it is
+easier to watch than to read:
+
+![Blockwise tiling with the running online softmax statistics](results/online-softmax-tiling.gif)
+
+*Schematic of the algorithm, not a measurement. Non-causal, N=64, D=16, tile 16 by 16,
+seed 0, traced through the reference in
+[fa/ref/online_softmax.py](fa/ref/online_softmax.py). Only the coloured block of scores
+exists at each step: grey blocks were computed and freed, white ones have not been
+touched. Every other figure on this page is measured data.*
+
 ## 2. What I found
 **Fusion is worth roughly 3× on this hardware, and it takes achieved throughput from 22% of the CPU's measured fp32 peak to roughly 67%.** This is the central result and it is measured rather than modelled.
 
