@@ -297,8 +297,7 @@ def run_config(
 
     row.flops_fwd_analytic = flops_fwd(n, causal)
     row.flops_bwd_analytic = flops_bwd(n, causal)
-    # None of these three skip masked blocks, so the work actually issued is the full
-    # N^2 even when causal. Achieved throughput below uses the executed figure.
+    # Kept for reference: the full N^2 work a dense implementation issues.
     row.flops_fwd_executed = 4.0 * B * H * n * n * D
     by, model = hbm_bytes(impl, n, elem)
     row.hbm_bytes_analytic = by
@@ -306,7 +305,15 @@ def run_config(
     row.arithmetic_intensity_flop_per_byte = row.flops_fwd_analytic / by
     if row.status == "ok":
         secs = row.latency_ms_median / 1e3
-        row.achieved_gflop_s = row.flops_fwd_executed / secs / 1e9
+        # Against the FLOPs the algorithm actually requires, so causal runs are not
+        # credited with the masked half. An implementation that issues the masked work
+        # anyway then reads as a lower rate, which is the honest conclusion: it is
+        # wasting half its work. Using the full count instead put causal sdpa at
+        # 6497 GFLOP/s, 2.19x over a 2963 GFLOP/s roof, which is impossible. Causal
+        # sdpa runs about 2x faster than non-causal here, which is what a kernel that
+        # skips masked blocks looks like. naive and chunked show no such gap, so they
+        # do issue the masked work, and they now read slower on causal rows.
+        row.achieved_gflop_s = row.flops_fwd_analytic / secs / 1e9
         row.implied_gb_s = by / secs / 1e9
     return row
 

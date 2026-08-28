@@ -58,3 +58,31 @@ Write the "Concluded" line even when the answer is "no idea why." Especially the
 **Measured:** two of the new figures were wrong on first draw and I only caught them by opening the PNGs. (1) The accumulator plot plotted two identical lines and annotated them "1x apart at N=8192", because I re-ran the experiment inside the plotting script and forgot to pass`acc_dtype`, so both arms used the fp32 default. The real gap is 3297x. (2) The causal figure put naive's N=4096 ratio of 10.65x on a linear axis, where it towered over everything and read as "naive benefits most from causal", the exact opposite of the finding, since that ratio is thrash variance from a non-causal run that was swapping (46.5 s vs 4.4 s), not a causal saving.
 **Concluded:** figures must read committed CSVs and never re-derive a measurement, for the same reason the prose must not, a second implementation of an experiment is a second thing that can silently disagree.`_exp_b` in`fa/ref/online_softmax.py` now writes`results/accumulator.csv` and the figure plots that file. The causal plot is clipped to the region where the real result lives, with the outlier labelled as the artefact it is rather than dropped. General rule I should have already been applying: look at every figure before shipping it, because a plot that is wrong is more convincing than a number that is wrong.
 
+## Achieved throughput was counting work the kernel skips
+
+**Noticed:** on the roofline, 12 of 36 MPS rows sat above the roof, sdpa causal at
+6497 GFLOP/s against a 2963 peak, 2.19x over. A point above the roof is not a
+result, it is a bug in the accounting.
+
+**Cause:** `achieved_gflop_s` divided `flops_fwd_executed`, which is always the full
+4*B*H*N^2*D, by the measured latency. The comment next to it asserted that none of
+the three implementations skip masked blocks, so the full count was the honest one.
+The data says otherwise. Causal sdpa runs about 2x faster than non-causal, which is
+what a kernel that skips the masked half looks like. naive and chunked show no such
+gap (747 vs 796, 449 vs 467), so those two really do issue the masked work.
+
+**Fixed:** achieved throughput is now `flops_fwd_analytic / latency`, the FLOPs the
+algorithm actually requires, for every implementation. An implementation that issues
+the masked work anyway reads as a lower rate on causal rows, which is the right
+conclusion: it is wasting half its work. Causal sdpa moved 6497 -> 3250, in line
+with its own non-causal 3346, and the 2.19x violation is gone.
+
+I recomputed the column in `results/roofline.csv` from the latencies already in the
+file rather than re-running the sweep. No measured latency changed, only the derived
+column, and `csv` diff confirms `achieved_gflop_s` is the sole column that moved.
+
+**Left standing:** sdpa still sits about 13% over the median roof on MPS, equally on
+causal and non-causal rows. That is the roof estimate being conservative, not a per
+row bug: `hardware.json` records the fp16 matmul peak moving 1937 to 3793 GFLOP/s
+with thermal state. The figure now draws that spread as a band instead of a single
+line, so a point measured on a cool machine no longer looks impossible.
