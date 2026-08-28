@@ -178,6 +178,12 @@ def main() -> int:
               "the figure is legitimately historical.")
         return 1
     print("no drift")
+    # What this does and does not cover, so the green line is not read as more
+    # than it is: each figure is recomputed from results/ and looked for in the
+    # prose. It cannot catch a wrong number that happens to appear somewhere,
+    # it does not check claims written in words (ratios, multiples, ranges),
+    # and it does not read notes/LOGBOOK.md.
+    print("this checks quoted figures against results/, not claims written in words")
     return 0
 
 
