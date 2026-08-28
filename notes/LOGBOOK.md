@@ -1,19 +1,24 @@
 # Logbook
 
-Dated entries, in order. Every kernel change that moves a number gets one. Three lines, not an essay.
+Dated entries, in order. Anything that moved a number gets one, three lines
+rather than an essay.
 
-This is the highest-value file in the repo and the one people don't expect. It's the difference between "I built a Flash Attention kernel" and being able to answer, two months later, *why*`num_stages=3` beat `num_stages=4` on this specific card. It is also, if you're ever asked to talk about this work, the record that makes the story concrete instead of general.
+I keep this because the measurements on this machine move around, and without a
+record I cannot tell a real change from thermal drift two weeks later. Several
+entries below are me being wrong and finding out later, which is the reason the
+file is worth keeping.
 
 **Format:**
 
 ```markdown
-## YYYY-MM-DD — <one-line title>
+## YYYY-MM-DD, <one-line title>
 **Tried:** what I changed
-**Measured:** the number, before → after
-**Concluded:** what it means, or what I still don't understand
+**Measured:** the number, before to after
+**Concluded:** what it means, or what I still do not understand
 ```
 
-Write the "Concluded" line even when the answer is "no idea why." Especially then. The unexplained results are the ones you come back to.
+The concluded line gets written even when the answer is that I do not know why.
+Those are the ones I come back to.
 
 ---
 
