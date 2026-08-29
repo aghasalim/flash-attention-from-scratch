@@ -59,6 +59,16 @@ touched. Every other figure on this page is measured data.*
 ## 2. What I found
 **Fusion is worth roughly 3× on this hardware, and it takes achieved throughput from 22% of the CPU's measured fp32 peak to roughly 67%.** This is the central result and it is measured rather than modelled.
 
+Tiling on its own buys nothing. Chunked attention runs at 0.56 to 0.59× naive on the
+GPU, and its arithmetic intensity is 29.47 against naive's 31.51, so looping over
+key blocks without fusing moves intensity the wrong way. The memory wall is a cliff
+rather than a slope: naive attention follows `N²` up to 2048 and then takes 46.5 s at
+`N = 4096` where the trend says 174 ms, a 267× jump for 4× the work, while chunked
+attention is 37.95× faster at that size and still runs at 16384. Causal masking pays
+only where blocks are skipped, 2.02× for the SDPA path that skips them against 0.91
+to 0.98× for the implementations that mask a dense `N×N`, and fp32 accumulators are
+worth a factor of 3297 in maximum absolute error at `N = 8192`.
+
 ![CPU fusion: latency and speedup with ranges](results/fusion.png)
 ![Achieved throughput as a share of measured fp32 peak](results/throughput.png)
 ![Latency scaling on MPS and CPU](results/latency-scaling.png)
@@ -70,6 +80,15 @@ touched. Every other figure on this page is measured data.*
 Full detail in [notes/METHODS.md](notes/METHODS.md#2-what-i-found).
 ## 3. What is measured, and what is not
 Hardware fingerprint via `scripts/env.py`, which has a full NVIDIA code path that finds nothing here and says so.
+
+Every number on this page comes off an Apple M4 with 10 GPU cores and 25.77 GB of
+unified memory: 95.86 GB/s copy bandwidth on MPS, 101.29 GB/s on the CPU, and matmul
+peaks of 2963.5 GFLOP/s fp16 on MPS and 1738.3 GFLOP/s fp32 on the CPU. There is no
+CUDA device and no macOS Triton wheel, so HBM bandwidth, tensor-core throughput, SM
+count, `cp.async`, FP8 and TMA are all recorded as not measured on this hardware
+instead of being filled in from a spec sheet. MPS has no float64 either, which is why
+the fp64 reference runs on the CPU. Run-to-run spread on an identical matmul is wide
+enough to move a conclusion, so every figure here is a median reported with its range.
 
 Full detail in [notes/METHODS.md](notes/METHODS.md#3-what-is-measured-and-what-is-not).
 ## 4. Reproducing
@@ -93,14 +112,24 @@ The 192 expected failures are the kernel tests. They are written and will run
 against a Triton implementation the day there is a GPU; they are marked `xfail` for
 want of hardware, not for want of a test.
 
-`scripts/check_numbers.py` re-derives 23 of the figures in this file from
-`hardware.json` and `results/*.csv` and fails if they disagree. It runs in CI on
+`scripts/check_numbers.py` re-derives 34 quoted figures from `hardware.json` and
+`results/*.csv` and fails if the prose and the data disagree. It reads this file and
+the notes together, since the detail lives in `notes/METHODS.md` now. It runs in CI on
 every push, because prose goes stale when the underlying data is regenerated rather
 than when the prose is edited, which is precisely how the ridge-point error above
 survived for several hours.
 
 ## 5. Method and structure
 The work is organised into waves, each one verifiable on its own before the next depends on it.
+
+`fa/ref/` holds the fp64 ground truth, the naive, chunked and backend-forced SDPA
+baselines, and the NumPy online-softmax reference written in the shape the Triton
+kernel will take; `fa/triton/` and `fa/cuda/` are empty and waiting on hardware. The
+suite is 500 tests, 192 of them xfail pending a GPU, and it was written against the
+references before any kernel existed, since a harness written afterwards tends to
+encode the kernel's own bugs as expected behaviour. Correctness is a relative bar
+rather than a fixed tolerance: a kernel's error against the fp64 reference must be no
+worse than twice the naive implementation's error against that same reference.
 
 Full detail in [notes/METHODS.md](notes/METHODS.md#5-method-and-structure).
 ## 6. Limitations
@@ -128,6 +157,16 @@ The backward pass is derived on paper and never executed.
 
 ## 7. Errors worth recording
 Five, in descending order of how much they should have embarrassed me.
+
+Twice I reported a trend from single runs and twice had to withdraw it. The fusion
+speedup looked like a clean climb to 4.47× until five repeats flattened it near 3×,
+and I called attention memory-bound off one ridge point before noticing that its band,
+20.08 to 40.55, straddles naive's arithmetic intensity of 31.51. My out-of-memory
+prediction was 19.2% out because the textbook model counts two `N²` tensors and the
+real one holds 3.16, the third being the `masked_fill` intermediate; with three the
+prediction lands 2.7% under the measured failure. I also expected tiling to be the
+win when it is 0.56×, and I trusted `sdpa_kernel` without checking it was honoured,
+which on MPS it is not.
 
 Full detail in [notes/METHODS.md](notes/METHODS.md#7-errors-worth-recording).
 ## 8. References
