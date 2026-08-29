@@ -33,8 +33,8 @@ multiply and one add per inner-product term.
 
 | step | shape | FLOPs |
 |---|---|---|
-|`S = Q Kᵀ` |`(N×D) @ (D×N)` |`2·N·N·D` |
-|`O = P V`  |`(N×N) @ (N×D)` |`2·N·N·D` |
+| `S = Q Kᵀ` | `(N×D) @ (D×N)` | `2·N·N·D` |
+| `O = P V` | `(N×N) @ (N×D)` | `2·N·N·D` |
 
 So `4·N²·D` per head, and over the whole batch:
 
@@ -58,11 +58,11 @@ fraction is actually recovered.
 
 | step | FLOPs |
 |---|---|
-| recompute `S = Q Kᵀ` |`2·N²·D` |
-|`dV = Pᵀ dO` |`2·N²·D` |
-|`dP = dO Vᵀ` |`2·N²·D` |
-|`dQ = dS K`  |`2·N²·D` |
-|`dK = dSᵀ Q` |`2·N²·D` |
+| recompute `S = Q Kᵀ` | `2·N²·D` |
+| `dV = Pᵀ dO` | `2·N²·D` |
+| `dP = dO Vᵀ` | `2·N²·D` |
+| `dQ = dS K` | `2·N²·D` |
+| `dK = dSᵀ Q` | `2·N²·D` |
 
 ```
 FLOPs_bwd = 10 · B · H · N² · D   =   2.5 × forward
@@ -113,7 +113,7 @@ Machine balance = measured compute ÷ measured bandwidth. Both measured by
 The MPS ridge point is **not stable**. Peak compute swings 1937 to 3793 GFLOP/s with
 thermal state, which puts the ridge anywhere in **20.08 to 40.55 FLOP/byte**. That band
 is wide enough to change the verdict below, so read the next table with it in mind.
-| CUDA |`not measured on this hardware (no CUDA device; developed on Apple M4)` | same | same |
+| CUDA | `not measured on this hardware (no CUDA device; developed on Apple M4)` | same | same |
 
 Measured arithmetic intensity at `N=4096`, MPS fp16, non-causal, from
 `results/roofline.csv`:
@@ -250,8 +250,8 @@ Per rule 6, stated rather than estimated:
 `SDPBackend.FLASH_ATTENTION` on this machine is not the FlashAttention-2 CUDA
   kernel. `not measured on this hardware (no CUDA device; developed on Apple M4)`
 - **CUDA ridge point, HBM bandwidth, tensor-core TFLOP/s, measured-vs-advertised
-  ratio.**`not measured on this hardware (no CUDA device; developed on Apple M4)`
-- **Backend-forced SDPA comparison on MPS.**`torch.nn.attention.sdpa_kernel` is a
+  ratio.** `not measured on this hardware (no CUDA device; developed on Apple M4)`
+- **Backend-forced SDPA comparison on MPS.** `torch.nn.attention.sdpa_kernel` is a
   **no-op on MPS**: the probe row in the CSV records
 `sdpa_backend_honored=False`, and every MPS sdpa row is labelled
 `MATH requested / NOT HONORED: whatever kernel this device picked`. Those rows

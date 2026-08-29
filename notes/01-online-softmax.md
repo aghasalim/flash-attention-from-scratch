@@ -38,7 +38,7 @@ Now every exponent is `≤ 0`, so every `exp` is in `(0, 1]`, and the denominato
 Nothing can overflow, in any float type, ever.
 
 The range this buys matters more than it sounds. fp16's largest finite value is 65504, and
-`log(65504) = 11.0899`, so `exp(x)` overflows fp16 at `x > 11.09`` exp(12) ` is already` inf `.
+`log(65504) = 11.0899`, so `exp(x)` overflows fp16 at `x > 11.09`, and `exp(12)` is already `inf`.
 Attention scores are `q·k/√d`, and with `d = 64..128` and unnormalised activations they routinely
 run into the tens. fp32 buys more headroom (`log(3.403e38) = 88.7`) but not unlimited headroom,
 and experiment (c) below is a row that kills fp32 too.
@@ -87,7 +87,7 @@ the `N`-long probability row.
 (iii)  O_j = Σ_{a ∈ B_j} exp(x_a - m_j) · v_a
 ```
 
-**Base case, `j = 0`.**`B_0 = ∅`. With the usual conventions `max ∅ = -∞` and empty sums `= 0`,
+**Base case, `j = 0`.** `B_0 = ∅`. With the usual conventions `max ∅ = -∞` and empty sums `= 0`,
 the initialisation `m_0 = -∞`, `l_0 = 0`, `O_0 = 0` satisfies (i),(iii).
 
 If the `-∞` bothers you, check `j = 1` directly instead: `m_1 = max(-∞, m̃_1) = m̃_1`,
@@ -208,8 +208,8 @@ cols `[kv_start, kv_end)` with mask `col ≤ row`:
 
 | zone | condition | work |
 |---|---|---|
-| skip |`kv_start > q_end - 1` | entirely above the diagonal: do nothing, and break, since later blocks are too |
-| dense |`kv_end - 1 ≤ q_start` | entirely below: full tile, no mask, no predication |
+| skip | `kv_start > q_end - 1` | entirely above the diagonal: do nothing, and break, since later blocks are too |
+| dense | `kv_end - 1 ≤ q_start` | entirely below: full tile, no mask, no predication |
 | diagonal | otherwise | straddles the diagonal: element-level mask, the only zone that pays for it |
 
 Only `O(N/BLOCK)` blocks are diagonal, so masking cost is linear in the number of blocks while the
@@ -261,7 +261,7 @@ for `QK^T` and `2N²d` for `PV`. Not one multiply is saved. What changes is the 
 compute-bound, so the wall-clock is set by the traffic term and not the FLOP term, the fused kernel
 wins by never writing `S` and `P` to HBM at all.
 
-**The condition.**`N²d²/M < N²` exactly when `M > d²`. For `d = 64`, `d² = 4096` elements = 16 KB in
+**The condition.** `N²d²/M < N²` exactly when `M > d²`. For `d = 64`, `d² = 4096` elements = 16 KB in
 fp32; for `d = 128`, 64 KB. Shared memory per SM on real datacenter GPUs is in the 100 to 228 KB range,
 so `M >> d²` comfortably holds and the inequality is not close. It is worth noticing that it *is* a
 condition and not a law: at very large head dimension the tiling stops paying, which is the same
@@ -321,11 +321,11 @@ Reading the columns:
 
 - **fp32 holds.** Every fp32 column is flat in `N`, at a few times `fp32 eps = 1.19e-07`. Growing the
   row 64x does not degrade it measurably.
-- **fp16 degrades, and the denominator degrades monotonically.**`|sum-1|` for fp16 climbs
+- **fp16 degrades, and the denominator degrades monotonically.** `|sum-1|` for fp16 climbs
   5.172e-04 → 2.301e-03 from N=128 to N=8192 while fp32 sits at ~2e-07. Each term added into `l`
   costs one fp16 rounding (`fp16 eps = 9.77e-04`); at N=8192 there are 8192 of them, partly
   cancelling, and the residue is 2.3e-03.
-- **`rel` hits 1.000 and then exceeds it.** A relative error of exactly 1 means a probability that
+- ** `rel` hits 1.000 and then exceeds it.** A relative error of exactly 1 means a probability that
   should be nonzero came back as 0, the fp16 `exp` underflowed. Past 1 means it came back with the
   wrong magnitude entirely. From N=1024 upward, fp16 is not merely imprecise on the small
   probabilities, it has lost them.
@@ -346,8 +346,8 @@ everything else `~1e-87`.
 
 | arm | dtype | result |
 |---|---|---|
-| naive `exp(x)/Σexp(x)` | fp32 |`Σ exp(x) = inf`, peak prob `nan`, 1 non-finite entry of 1024 |
-| naive `exp(x)/Σexp(x)` | fp16 |`Σ exp(x) = inf`, peak prob `nan`, 1 non-finite entry of 1024 |
+| naive `exp(x)/Σexp(x)` | fp32 | `Σ exp(x) = inf`, peak prob `nan`, 1 non-finite entry of 1024 |
+| naive `exp(x)/Σexp(x)` | fp16 | `Σ exp(x) = inf`, peak prob `nan`, 1 non-finite entry of 1024 |
 | online (max-shifted) | fp32 | peak prob `1.0`, max err vs fp64 exact `1.384e-87` |
 | online (max-shifted) | fp16 | peak prob `1.0`, max err vs fp64 exact `1.384e-87` |
 
@@ -377,7 +377,7 @@ grid-axis loop safe to run in any order the GPU happens to schedule it.
 N=1000, `block_size=128`, so the last block is 104 wide. Scores drawn in `[-12.46, 0.81]`, all
 negative except the tail, which is the realistic case.
 
-| handling of the short block | max abs deviation from `scipy.softmax` |`Σ p` |
+| handling of the short block | max abs deviation from `scipy.softmax` | `Σ p` |
 |---|---|---|
 | short slice (correct) | 3.469e-18 | 1.000000 |
 | padded with 0.0 (the bug) | 7.033e-02 | 0.430484 |

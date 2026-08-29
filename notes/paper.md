@@ -112,12 +112,12 @@ here: `not measured on this hardware (no CUDA device; developed on Apple M4)`.
 
 | component | file | status |
 |---|---|---|
-| hardware fingerprint |`scripts/env.py` | full NVIDIA path + Apple path; run |
-| fp64 ground truth |`fa/ref/fp64.py` | run |
-| naive / chunked / sdpa baselines |`fa/ref/naive.py` | run |
-| online-softmax reference (NumPy) |`fa/ref/online_softmax.py` | run |
-| correctness harness |`tests/` (500 tests) | run |
-| roofline harness |`bench/roofline.py` | run |
+| hardware fingerprint | `scripts/env.py` | full NVIDIA path + Apple path; run |
+| fp64 ground truth | `fa/ref/fp64.py` | run |
+| naive / chunked / sdpa baselines | `fa/ref/naive.py` | run |
+| online-softmax reference (NumPy) | `fa/ref/online_softmax.py` | run |
+| correctness harness | `tests/` (500 tests) | run |
+| roofline harness | `bench/roofline.py` | run |
 
 `fa/ref/online_softmax.py` is deliberately structured as the eventual Triton
 kernel, outer loop over Q blocks (the grid axis), inner sequential loop over KV
@@ -279,13 +279,13 @@ in `notes/LOGBOOK.md`.
 | **causal block skipping** | N=16384 | **2.02× (sdpa) vs 0.98× (chunked)** | implementations that skip blocks approach the theoretical 2×; ones that mask a dense N² get *slower* |
 | **causal block skipping** | N=4096 | 1.89× (sdpa) vs 0.93× (chunked) | same shape at 4× shorter context |
 | block-order invariance | N=512, 20 perms | 2.220e-16 | confirms the recurrence is order-independent |
-| backward: atomic vs split kernels |, |`not measured on this hardware (no CUDA device; developed on Apple M4)` | task 05 |
-|`exp2` vs `exp` |, |`not measured on this hardware (no CUDA device; developed on Apple M4)` | task 03 |
-| BLOCK_M / BLOCK_N / num_stages / num_warps sweeps |, |`not measured on this hardware (no CUDA device; developed on Apple M4)` | task 07 |
-| smem swizzling, `cp.async` |, |`not measured on this hardware (no CUDA device; developed on Apple M4)` | task 10 |
-| Flash-Decoding vs standard |, |`not measured on this hardware (no CUDA device; developed on Apple M4)` | task 09 |
-| GQA vs MHA KV memory |, |`not measured on this hardware (no CUDA device; developed on Apple M4)` | task 08 |
-| varlen vs padded |, |`not measured on this hardware (no CUDA device; developed on Apple M4)` | task 08 |
+| backward: atomic vs split kernels | , | `not measured on this hardware (no CUDA device; developed on Apple M4)` | task 05 |
+| `exp2` vs `exp` | , | `not measured on this hardware (no CUDA device; developed on Apple M4)` | task 03 |
+| BLOCK_M / BLOCK_N / num_stages / num_warps sweeps | , | `not measured on this hardware (no CUDA device; developed on Apple M4)` | task 07 |
+| smem swizzling, `cp.async` | , | `not measured on this hardware (no CUDA device; developed on Apple M4)` | task 10 |
+| Flash-Decoding vs standard | , | `not measured on this hardware (no CUDA device; developed on Apple M4)` | task 09 |
+| GQA vs MHA KV memory | , | `not measured on this hardware (no CUDA device; developed on Apple M4)` | task 08 |
+| varlen vs padded | , | `not measured on this hardware (no CUDA device; developed on Apple M4)` | task 08 |
 
 ### 5.1 Where the causal result comes from
 
@@ -315,7 +315,7 @@ triangle. That gap *is* the value of block skipping, isolated.
 - **The ridge point is noisy enough to change a conclusion.** ±35% on peak
   compute, from thermal throttling. Any single-run roofline verdict near the knee
   on this machine should be distrusted.
-- **`sdpa_kernel` is a no-op on MPS.** Forcing a backend silently does nothing `sdpa_backend_honored=False` in the CSV. The "sdpa" rows are whatever kernel the
+- ** `sdpa_kernel` is a no-op on MPS.** Forcing a backend silently does nothing `sdpa_backend_honored=False` in the CSV. The "sdpa" rows are whatever kernel the
   device chose, and are labelled `NOT HONORED` rather than reported as a MATH
   measurement. On CPU the same probe correctly raises.
 - **No per-config peak memory on CPU.** torch exposes no resettable per-device
