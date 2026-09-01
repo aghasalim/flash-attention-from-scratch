@@ -53,7 +53,7 @@ is the single most useful thing I learned here.
 **The memory wall is a cliff, not a slope.** Naive attention tracks `N²` exactly
 while it fits, with successive doublings costing 3.84× and 4.04×, and then at `N = 4096`
 it goes from 174 ms to 46.5 s, a 267× jump for 4× the work, as 8 GiB of score
-traffic stops fitting the 17.76 GiB working set. At that point chunked attention,
+matrices stops fitting the 17.76 GiB working set. At that point chunked attention,
 slower at every smaller size, is 37.95× faster, and naive fails outright 1024
 tokens later. Chunked, on the same sweep, reaches `N = 16384`.
 
@@ -151,7 +151,7 @@ fa/ref/        fp64 ground truth; naive, chunked and backend-forced SDPA baselin
                key/value blocks, fp32 accumulators, causal split into three zones)
 fa/triton/     empty, task 03 and 05-10
 fa/cuda/       empty, task 10
-tests/         500 tests; 192 xfail pending a GPU
+tests/         527 tests; 192 xfail pending a GPU
 bench/         roofline sweep, CPU fusion measurement, and the figures
 notes/         derivations, the write-up, and the logbook
 results/       generated CSVs and figures, committed so the tables above reproduce

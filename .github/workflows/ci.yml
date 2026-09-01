@@ -43,3 +43,52 @@ jobs:
       # the roofline verdict. See notes/LOGBOOK.md, 2026-08-24.
       - name: Check quoted numbers against their source data
         run: python scripts/check_numbers.py
+
+  # Everything above this line is Python checking Python. This job recomputes the
+  # published numbers in six other languages and fails if any two disagree. It
+  # then corrupts a results file and requires the same run to reject it, because
+  # a check that cannot fail is not a check.
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      # Only the golden-file check needs torch: it re-derives the reference
+      # outputs from the inputs stored in the file. The C, Rust, Go, SQL, R and
+      # JavaScript checks read committed data and need nothing from Python.
+      - name: Install torch (CPU) for the golden-file check
+        run: |
+          python -m pip install --upgrade pip
+          pip install numpy torch --index-url https://download.pytorch.org/whl/cpu
+
+      # sqlite3, gcc, go, cargo and node are preinstalled on ubuntu-latest. R is not.
+      - name: Install R if the runner image drops it
+        run: |
+          command -v Rscript || {
+            sudo apt-get update
+            sudo apt-get install -y --no-install-recommends r-base-core
+          }
+
+      - name: Recompute the published numbers in other languages
+        run: ./verify/verify.sh
+
+      - name: The checks must be able to fail
+        run: |
+          set -e
+          cp results/roofline.csv "$RUNNER_TEMP/roofline.csv"
+          # Move the N=4096 naive latency by a factor of ten. The SQL sees the
+          # cliff ratio and the derived throughput columns disagree; the R fit
+          # sees the jump and the trend disagree.
+          sed -i 's/46545.494458999885/4654.5494458999885/' results/roofline.csv
+          if ./verify/verify.sh; then
+            echo "corrupted results/roofline.csv passed: the checks check nothing"
+            exit 1
+          fi
+          echo "corruption rejected, restoring"
+          cp "$RUNNER_TEMP/roofline.csv" results/roofline.csv
+          ./verify/verify.sh
