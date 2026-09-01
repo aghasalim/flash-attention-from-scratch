@@ -87,14 +87,14 @@ at `B=4, H=32, D=64`, fp16:
 
 | N | Q,K,V,O | S,P | ratio |
 |---:|---:|---:|---:|
-| 512 | 0.031 GiB | 0.125 GiB | 4× |
-| 1024 | 0.062 GiB | 0.500 GiB | 8× |
-| 2048 | 0.125 GiB | 2.000 GiB | 16× |
-| **4096** | **0.250 GiB** | **8.000 GiB** | **32×** |
-| 8192 | 0.500 GiB | 32.000 GiB | 64× |
-| 16384 | 1.000 GiB | 128.000 GiB | 128× |
+| 512 | 0.031 GiB | 0.250 GiB | 8× |
+| 1024 | 0.062 GiB | 1.000 GiB | 16× |
+| 2048 | 0.125 GiB | 4.000 GiB | 32× |
+| **4096** | **0.250 GiB** | **16.000 GiB** | **64×** |
+| 8192 | 0.500 GiB | 64.000 GiB | 128× |
+| 16384 | 1.000 GiB | 256.000 GiB | 256× |
 
-At `N=4096` the score matrix is 32× the traffic of all four real tensors combined.
+At `N=4096` the score matrix is 64× the traffic of all four real tensors combined.
 This is the number that makes the argument: the kernel spends its time moving a
 matrix that exists only as an intermediate and is never wanted by the caller.
 Fusing softmax into the matmul means `S` and `P` never reach memory at all, which
@@ -162,7 +162,7 @@ would conclude tiling was a pessimisation.
 
 **At N=4096 it inverts by a factor of 38.** Naive goes from 174 ms to 46.5
 seconds, a 267× jump for a 4× increase in work. Nothing about the arithmetic
-changed; the 8 GiB of score traffic stopped fitting in the 17.76 GiB MPS working
+changed; the 8 GiB of score matrices stopped fitting in the 17.76 GiB MPS working
 set alongside everything else, and the run went to swap. The measured peak for
 that config is 21.7 GB. This is the memory wall, and it does not arrive gently.
 

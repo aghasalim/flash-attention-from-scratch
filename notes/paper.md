@@ -41,7 +41,7 @@ matmuls are `4·B·H·N²·D` FLOPs. The problem is not the FLOPs, it is that `S
 intermediates the caller never wants.
 
 The ratio of score traffic to parameter traffic is `N/D`. At `D=64` the scores
-pass everything else at `N=64`, and by `N=4096` they are 32× the traffic of `Q`,
+pass everything else at `N=64`, and by `N=4096` they are 64× the traffic of `Q`,
 `K`, `V` and `O` combined (§4.2). Fusing softmax into the matmul so that `S` and
 `P` never leave the chip removes that term entirely.
 
@@ -116,7 +116,7 @@ here: `not measured on this hardware (no CUDA device; developed on Apple M4)`.
 | fp64 ground truth | `fa/ref/fp64.py` | run |
 | naive / chunked / sdpa baselines | `fa/ref/naive.py` | run |
 | online-softmax reference (NumPy) | `fa/ref/online_softmax.py` | run |
-| correctness harness | `tests/` (500 tests) | run |
+| correctness harness | `tests/` (527 tests) | run |
 | roofline harness | `bench/roofline.py` | run |
 
 `fa/ref/online_softmax.py` is deliberately structured as the eventual Triton
@@ -129,7 +129,7 @@ inventing it.
 
 The test suite was written against the references *before* any kernel existed. A
 harness written after a kernel tends to encode that kernel's bugs as expected
-behaviour. Everything kernel-dependent is `xfail`, 192 of the 500 tests, and
+behaviour. Everything kernel-dependent is `xfail`, 192 of the 527 tests, and
 those are xfail for lack of a GPU, not for lack of a test.
 
 The comparison bar is **relative**, not absolute:
@@ -193,9 +193,9 @@ fp16, `B=4 H=32 D=64`:
 
 | N | Q,K,V,O | S,P | ratio |
 |---:|---:|---:|---:|
-| 1024 | 0.062 GiB | 0.500 GiB | 8× |
-| 4096 | 0.250 GiB | 8.000 GiB | **32×** |
-| 16384 | 1.000 GiB | 128.000 GiB | 128× |
+| 1024 | 0.062 GiB | 1.000 GiB | 16× |
+| 4096 | 0.250 GiB | 16.000 GiB | **64×** |
+| 16384 | 1.000 GiB | 256.000 GiB | 256× |
 
 ### 4.3 Arithmetic intensity vs the ridge
 
@@ -243,7 +243,7 @@ MPS fp16, non-causal, median:
 
 Latency tracks `N²` exactly while it fits (ratios 3.84×, 4.04× for successive
 doublings), then naive goes from 174 ms to 46.5 s, a 267× jump for 4× the work,
-as 8 GiB of score traffic stops fitting the 17.76 GiB working set and the run goes
+as 8 GiB of score matrices stops fitting the 17.76 GiB working set and the run goes
 to swap. Peak for that config is 21.7 GB.
 
 ### 4.5 OOM threshold: the prediction was wrong, and usefully so

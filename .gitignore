@@ -13,3 +13,6 @@ dist/
 # results/ is deliberately NOT ignored -- the benchmark CSVs are checked in
 # so the README tables stay reproducible.
 .ruff_cache/
+
+# Build products of the verification checks in verify/.
+verify/*/target/
