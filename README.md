@@ -118,61 +118,11 @@ want of hardware, not for want of a test.
 the notes together, since the detail lives in `notes/METHODS.md` now. It runs in CI on
 every push, because prose goes stale when the underlying data is regenerated rather
 than when the prose is edited, which is precisely how the ridge-point error above
-survived for several hours.
+survived for several hours. Independently of that, `verify/` recomputes every
+published quantity from the rawest form of it in the repository, by another
+route, and CI fails if any of them disagrees.
 
-## 5. Everything here is computed twice
-
-Every number on this page came out of one implementation. The kernel is NumPy,
-the benchmarks are PyTorch, the tables are pandas, the plots read the same CSVs
-the tables do, and `scripts/check_numbers.py` compares the prose against those
-CSVs in Python again. None of that is independent: an error in a derivation is
-reproduced by everything downstream, because everything downstream reads its
-output. A green tick meant the numbers were consistent, not that they were right.
-
-`verify/` recomputes them somewhere else. Each check reads the rawest form of a
-published quantity that exists in the repository and derives the published form
-again, in another language, by another route. An error would have to be made
-identically in C, Rust, Go, SQL, R and JavaScript to survive.
-
-```bash
-./verify/verify.sh     # 7 passed, 0 failed, 0 skipped
-```
-
-| language | what it recomputes | from | measured agreement |
-|---|---|---|---|
-| C | tiled attention and the log-sum-exp, one key block at a time, never building `S` | `verify/golden/attention_golden.bin`, the fp64 PyTorch outputs | 7 cases, worst \|O - torch\| 6.66e-16, worst \|lse - torch\| 1.78e-15, tolerance 1e-12 |
-| Rust | the same kernel under every block shape in a grid of 19 edge lengths | the same golden file | 2361 tilings, worst \|O - torch\| 8.88e-16, spread across block shapes 1.28e-15 |
-| Go | structure of every results CSV, and the ratio columns of the accumulator table | `results/*.csv` | 117 data rows well formed, ratio columns re-divided exactly, 0.0e+00 |
-| SQL | arithmetic intensity, achieved GFLOP/s, implied GB/s, and the ratios quoted in §2 | `results/roofline.csv`, `results/fusion.csv` | 64 rows recomputed from FLOPs, bytes and latency, exact to 1e-12 relative; 11 quoted ratios reproduced to the digits printed |
-| R | the `N²` claim as a log-log fit, the doubling factors, the cliff | `results/roofline.csv` | fitted exponent 1.976, doublings 3.84× and 4.04×, jump 267×, cliff 69× over the fitted trend |
-| JavaScript | the byte counts in §1 and the share of measured fp32 peak in §2 | `README.md`, `notes/00-roofline.md`, `notes/paper.md`, `hardware.json` | 12 table rows across 3 documents, achieved GFLOP/s recomputed to 2.0e-16 relative |
-| Python | the golden file against its own stored inputs | `verify/golden/attention_golden.bin` | 7 cases, 0.0e+00 |
-
-The C and Rust implementations are the point of the exercise. They are not
-translations of `fa/ref/online_softmax.py`: the reference they are checked
-against materialises the whole `N×N` score matrix and normalises it in one pass,
-while they carry a running max and a running sum across key blocks and divide
-once at the end. Two different algorithms, and the answers have to agree. The
-Rust check runs every block shape rather than the six the Python self-check can
-afford, so a rescale that were wrong only for a short trailing block, or only
-when a later block raises the max, has nowhere left to hide.
-
-CI runs `verify/verify.sh`, then corrupts `results/roofline.csv` and requires the
-same run to reject it, then restores it and requires a pass. A check that cannot
-fail is not a check.
-
-**This found two real errors, both in prose rather than in code.** The traffic
-table in §1 was computed as `2·B·H·N²·e`, the size of `S` and `P`, while the
-sentence above it, the formula it says it is an instance of, and the byte model
-in `results/roofline.csv` all use `4·B·H·N²·e`, each of the two written once and
-read back once. Every `S,P` figure and every ratio in that table, in
-`notes/00-roofline.md` and in `notes/paper.md`, was half what it should have
-been; they are doubled now. Separately, §2 said that at `N = 4096` "the trend
-says 174 ms", which is the measured time at `N = 2048`, not a prediction: the
-`N²` fit through the smaller sizes predicts 679 ms there. Both had been read by
-me several times without being noticed, which is the argument for the checks.
-
-## 6. Method and structure
+## 5. Method and structure
 The work is organised into waves, each one verifiable on its own before the next depends on it.
 
 `fa/ref/` holds the fp64 ground truth, the naive, chunked and backend-forced SDPA
@@ -185,7 +135,7 @@ rather than a fixed tolerance: a kernel's error against the fp64 reference must 
 worse than twice the naive implementation's error against that same reference.
 
 Full detail in [notes/METHODS.md](notes/METHODS.md#5-method-and-structure).
-## 7. Limitations
+## 6. Limitations
 
 The kernel, the object the project is named after, does not exist. Everything here
 is baselines, references, harness and analysis.
@@ -208,7 +158,7 @@ reported as a MATH-backend measurement. On the CPU the same probe behaves correc
 
 The backward pass is derived on paper and never executed.
 
-## 8. Errors worth recording
+## 7. Errors worth recording
 Five, in descending order of how much they should have embarrassed me.
 
 Twice I reported a trend from single runs and twice had to withdraw it. The fusion
@@ -221,12 +171,12 @@ prediction lands 2.7% under the measured failure. I also expected tiling to be t
 win when it is 0.56×, and I trusted `sdpa_kernel` without checking it was honoured,
 which on MPS it is not.
 
-Two more were found by the checks in §5 rather than by me: the §1 traffic table
+Two more were found by the checks in `verify/` rather than by me: the §1 traffic table
 counted half the score traffic it said it counted, and §2 called a measurement a
 trend prediction.
 
 Full detail in [notes/METHODS.md](notes/METHODS.md#7-errors-worth-recording).
-## 9. References
+## 8. References
 
 Each paper is listed because the implementation follows it, not as background reading.
 
