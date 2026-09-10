@@ -141,16 +141,16 @@ The full ablation table, including every cell marked unmeasurable, is in
 ## 5. Method and structure
 
 
-The work is organised into waves, each one verifiable on its own before the next
-depends on it. The rules every wave follows are in [`METHODOLOGY.md`](../METHODOLOGY.md).
+The work is organised in stages, each one verifiable on its own before the next
+depends on it. The rules every stage follows are in [`METHODOLOGY.md`](../METHODOLOGY.md).
 
 ```
 fa/ref/        fp64 ground truth; naive, chunked and backend-forced SDPA baselines;
                the NumPy online-softmax reference, written in the shape the eventual
                Triton kernel takes (outer loop over query blocks, inner loop over
                key/value blocks, fp32 accumulators, causal split into three zones)
-fa/triton/     empty, task 03 and 05-10
-fa/cuda/       empty, task 10
+fa/triton/     empty, waiting on hardware
+fa/cuda/       empty, waiting on hardware
 tests/         527 tests; 192 xfail pending a GPU
 bench/         roofline sweep, CPU fusion measurement, and the figures
 notes/         derivations, the write-up, and the logbook

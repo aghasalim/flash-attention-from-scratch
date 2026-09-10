@@ -50,8 +50,8 @@ TOLERANCES: dict[torch.dtype, float | None] = {
 }
 
 # How much worse than naive a candidate may be before the test fails. 2.0 is the
-# number in the task spec; it is a factor, not a fudge -- if a kernel needs 3x it
-# is wrong, and raising this constant to make a test pass is rule 1 in AGENTS.md.
+# number I chose; it is a factor, not a fudge -- if a kernel needs 3x it
+# is wrong, and raising this constant to make a test pass is backwards.
 BAR_FACTOR = 2.0
 
 
@@ -107,9 +107,9 @@ def skip_if_no_mps() -> None:
 # implementations under test
 # --------------------------------------------------------------------------------
 #
-# Tasks 01, 02 and 03 own their own files and may not have landed yet (01 and 02 run
-# in parallel with this one; 03 is a whole wave later, and on an Apple machine it can
-# never run at all -- Triton has no macOS wheel and there is no CUDA device). Every
+# The references and the kernel live in their own modules and may not exist yet, and
+# the kernel can never run on an Apple machine at all -- Triton has no macOS wheel and
+# there is no CUDA device. Every
 # import below is therefore soft: the suite degrades to "skipped", never to a
 # collection error.
 
@@ -122,22 +122,22 @@ def _optional(module: str, name: str) -> Callable | None:
 
 
 def external_naive() -> Callable | None:
-    """`fa.ref.naive.naive_attention` (task 01), or None if it has not landed."""
+    """`fa.ref.naive.naive_attention`, or None if it has not landed."""
     return _optional("fa.ref.naive", "naive_attention")
 
 
 def external_chunked() -> Callable | None:
-    """`fa.ref.naive.chunked_attention` (task 01), or None."""
+    """`fa.ref.naive.chunked_attention`, or None."""
     return _optional("fa.ref.naive", "chunked_attention")
 
 
 def external_online() -> Callable | None:
-    """`fa.ref.online_softmax.online_attention` (task 02, NumPy), or None."""
+    """`fa.ref.online_softmax.online_attention` (NumPy), or None."""
     return _optional("fa.ref.online_softmax", "online_attention")
 
 
 def kernel_attention() -> Callable:
-    """`fa.ops.attention.attention` (task 03). Raises ImportError until it exists."""
+    """`fa.ops.attention.attention`. Raises ImportError until it exists."""
     from fa.ops.attention import attention
 
     return attention
@@ -148,7 +148,7 @@ def local_naive(q, k, v, causal=False, sm_scale=None):
 
     Deliberately unfused and deliberately low precision -- scores, softmax and PV
     all in q.dtype. This is the thing a kernel has to be no worse than. It is a
-    fallback for `fa/ref/naive.py` (task 01) so that this harness can be run and
+    fallback for `fa/ref/naive.py` so that this harness can be run and
     the bar measured before that file exists; when it exists it is preferred.
     """
     if sm_scale is None:
@@ -162,7 +162,7 @@ def local_naive(q, k, v, causal=False, sm_scale=None):
 
 
 def naive_attention(q, k, v, causal=False, sm_scale=None):
-    """The bar. Prefers task 01's implementation, falls back to `local_naive`."""
+    """The bar. Prefers `fa/ref/naive.py`, falls back to `local_naive`."""
     ext = external_naive()
     if ext is not None and sm_scale is None:
         return ext(q, k, v, causal=causal)
@@ -214,11 +214,11 @@ def max_abs_err(out: torch.Tensor, ref_fp64: torch.Tensor) -> float:
 
 
 def assert_no_worse_than_naive(out, ref_fp64, naive_fp16, factor: float = BAR_FACTOR) -> None:
-    """The bar, exactly as the spec states it.
+    """The bar, stated exactly.
 
     err_kernel <= factor * err_naive, both against the same float64 reference.
     Do not loosen `factor` to make a test pass -- if the candidate is more than 2x
-    worse than the strawman it is wrong (AGENTS.md rule 1).
+    worse than the strawman it is wrong.
     """
     err_kernel = (out.double() - ref_fp64).abs().max()
     err_naive = (naive_fp16.double() - ref_fp64).abs().max()
@@ -241,16 +241,16 @@ def assert_no_worse_than_naive(out, ref_fp64, naive_fp16, factor: float = BAR_FA
 # uniform `(q, k, v, causal=False, sm_scale=None) -> Tensor` callable:
 #
 #   fp64     fa.ref.fp64.attention_fp64          -- the ground truth, always present
-#   naive    fa.ref.naive.naive_attention        -- task 01; local_naive until it lands
+#   naive    fa.ref.naive.naive_attention        -- local_naive until it lands
 #   local    tests' own textbook attention       -- always present, takes sm_scale
-#   chunked  fa.ref.naive.chunked_attention      -- task 01, tiled but unfused
-#   kernel   fa.ops.attention.attention          -- task 03, the Triton kernel
+#   chunked  fa.ref.naive.chunked_attention      -- tiled but unfused
+#   kernel   fa.ops.attention.attention          -- the Triton kernel
 #
-# `kernel` raises ImportError until task 03 lands, which is why every parameter that
-# uses it carries an xfail mark (see KERNEL_PARAM). Missing task-01 files skip.
+# `kernel` raises ImportError until that module lands, which is why every parameter
+# that uses it carries an xfail mark (see KERNEL_PARAM). Missing `fa/ref/` files skip.
 
 KERNEL_XFAIL_REASON = (
-    "task 03: fa/ops/attention.py does not exist yet -- and on this machine it can "
+    "fa/ops/attention.py does not exist yet -- and on this machine it can "
     "never run (no CUDA device, no Triton wheel for macOS; developed on Apple M4)"
 )
 KERNEL_PARAM = pytest.param("kernel", marks=pytest.mark.xfail(reason=KERNEL_XFAIL_REASON))
@@ -273,7 +273,7 @@ def resolve_impl(name: str) -> Callable:
     if name == "chunked":
         fn = external_chunked()
         if fn is None:
-            pytest.skip("fa/ref/naive.py::chunked_attention not present yet (task 01)")
+            pytest.skip("fa/ref/naive.py::chunked_attention not present yet")
         return _adapt(functools.partial(fn, chunk=CHUNK), name)
     if name == "kernel":
         return kernel_attention()  # ImportError here is what the xfail mark expects

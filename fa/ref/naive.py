@@ -13,7 +13,7 @@ between chunked and a fused kernel is exactly what FlashAttention buys.
 
 Shapes are ``(B, H, N, D)``, contiguous, matching what the Triton kernel will take.
 
-Numerics (repo rule 5): inputs may be fp16/bf16, but every accumulator -- the softmax
+Numerics: inputs may be fp16/bf16, but every accumulator -- the softmax
 running max ``m_i``, the running denominator ``l_i`` and the output accumulator -- is
 fp32. The matmuls run in the input dtype, which is what makes ``naive_attention`` a
 fair "naive fp16" error baseline for the relative correctness bar.
@@ -73,7 +73,7 @@ def naive_attention(q: torch.Tensor, k: torch.Tensor, v: torch.Tensor, causal: b
     s.mul_(scale)  # in place: a strawman that also copies S would be unfair to itself
     if causal:
         s.masked_fill_(_causal_mask(q.shape[-2], k.shape[-2], q.device), float("-inf"))
-    # dtype=float32 makes the softmax max/sum accumulate in fp32 (rule 5) whatever S is.
+    # dtype=float32 makes the softmax max/sum accumulate in fp32 whatever S is.
     p = torch.softmax(s, dim=-1, dtype=torch.float32)
     return p.to(q.dtype) @ v
 
@@ -93,7 +93,7 @@ def chunked_attention(
     once per tile. See ``notes/00-roofline.md``.
 
     The running-max rescaling below is the standard numerically-safe way to combine
-    tiles. ``fa/ref/online_softmax.py`` (task 02) is where that algorithm is studied;
+    tiles. ``fa/ref/online_softmax.py`` is where that algorithm is studied;
     it is reproduced here only so this file stands alone.
     """
     if chunk <= 0:
@@ -102,7 +102,7 @@ def chunked_attention(
     n_k = k.shape[-2]
     scale = 1.0 / math.sqrt(d)
 
-    # rule 5: every accumulator is fp32 regardless of the input dtype.
+    # every accumulator is fp32 regardless of the input dtype.
     acc = torch.zeros((b, h, n_q, d), device=q.device, dtype=torch.float32)
     m_i = torch.full((b, h, n_q, 1), float("-inf"), device=q.device, dtype=torch.float32)
     l_i = torch.zeros((b, h, n_q, 1), device=q.device, dtype=torch.float32)

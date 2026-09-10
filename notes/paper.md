@@ -7,7 +7,7 @@
 ## Abstract
 
 This is a from-scratch reimplementation of IO-aware attention (FlashAttention),
-built in waves against a fixed set of task specs. This write-up covers what is
+built in stages, each verifiable on its own. This write-up covers what is
 built and measured: the online-softmax derivation and its proof of exactness, a
 NumPy reference structured as the eventual kernel, a 500-test correctness harness
 written before any kernel exists, and a roofline analysis of the unfused
@@ -29,8 +29,8 @@ later shows is arithmetic rather than algorithmic. Keeping accumulators in fp32
 rather than fp16 is worth a factor of **3297×** in error at N=8192.
 
 The Triton and CUDA C++ kernels are **not implemented**. Triton publishes no
-macOS wheel and there is no NVIDIA GPU here, so tasks 03 and 05 to 10 of the plan
-are blocked on hardware rather than on effort. Nothing in this document is
+macOS wheel and there is no NVIDIA GPU here, so the kernels and everything
+downstream of them are blocked on hardware rather than on effort. Nothing in this document is
 extrapolated to hardware that was not measured.
 
 ## 1. Background: why anyone fuses attention
@@ -122,8 +122,8 @@ here: `not measured on this hardware (no CUDA device; developed on Apple M4)`.
 `fa/ref/online_softmax.py` is deliberately structured as the eventual Triton
 kernel, outer loop over Q blocks (the grid axis), inner sequential loop over KV
 blocks, fp32 accumulators, causal handled as three block zones (skip / dense /
-diagonal-masked) rather than one masked loop. Task 03 ports it rather than
-inventing it.
+diagonal-masked) rather than one masked loop. The kernel will port it rather than
+invent it.
 
 ### 3.2 The harness came first, on purpose
 
@@ -153,13 +153,13 @@ FlashAttention; if the kernel and SDPA shared a bug it would be invisible.
 
 ### 3.3 What does not exist
 
-Tasks 03 (Triton forward), 05 (backward), 06 (causal/masks), 07 (autotune), 08
-(GQA/varlen/dropout), 09 (Flash-Decoding/paged), 10 (CUDA C++) are not
+The Triton forward, the backward, causal masking, autotuning, GQA/varlen/dropout,
+Flash-Decoding/paged attention and the CUDA C++ kernel are not
 implemented. `pip install triton` on macOS returns *No matching distribution
 found*, there is no darwin wheel, and there is no NVIDIA GPU, nvcc or `ncu`
 here. Writing kernels that cannot be compiled or tested would produce six files
-that look finished and are unverified, which the project's own rule 3 (*measured
-or absent*) forbids.
+that look finished and are unverified, which the project's own bar, *measured
+or absent*, forbids.
 
 ## 4. Evaluation
 
@@ -279,13 +279,13 @@ in `notes/LOGBOOK.md`.
 | **causal block skipping** | N=16384 | **2.02× (sdpa) vs 0.98× (chunked)** | implementations that skip blocks approach the theoretical 2×; ones that mask a dense N² get *slower* |
 | **causal block skipping** | N=4096 | 1.89× (sdpa) vs 0.93× (chunked) | same shape at 4× shorter context |
 | block-order invariance | N=512, 20 perms | 2.220e-16 | confirms the recurrence is order-independent |
-| backward: atomic vs split kernels | , | `not measured on this hardware (no CUDA device; developed on Apple M4)` | task 05 |
-| `exp2` vs `exp` | , | `not measured on this hardware (no CUDA device; developed on Apple M4)` | task 03 |
-| BLOCK_M / BLOCK_N / num_stages / num_warps sweeps | , | `not measured on this hardware (no CUDA device; developed on Apple M4)` | task 07 |
-| smem swizzling, `cp.async` | , | `not measured on this hardware (no CUDA device; developed on Apple M4)` | task 10 |
-| Flash-Decoding vs standard | , | `not measured on this hardware (no CUDA device; developed on Apple M4)` | task 09 |
-| GQA vs MHA KV memory | , | `not measured on this hardware (no CUDA device; developed on Apple M4)` | task 08 |
-| varlen vs padded | , | `not measured on this hardware (no CUDA device; developed on Apple M4)` | task 08 |
+| backward: atomic vs split kernels | , | `not measured on this hardware (no CUDA device; developed on Apple M4)` | needs the backward kernel |
+| `exp2` vs `exp` | , | `not measured on this hardware (no CUDA device; developed on Apple M4)` | needs the Triton forward |
+| BLOCK_M / BLOCK_N / num_stages / num_warps sweeps | , | `not measured on this hardware (no CUDA device; developed on Apple M4)` | needs an autotuned kernel |
+| smem swizzling, `cp.async` | , | `not measured on this hardware (no CUDA device; developed on Apple M4)` | needs the CUDA C++ kernel |
+| Flash-Decoding vs standard | , | `not measured on this hardware (no CUDA device; developed on Apple M4)` | needs the decoding kernel |
+| GQA vs MHA KV memory | , | `not measured on this hardware (no CUDA device; developed on Apple M4)` | needs the GQA kernel |
+| varlen vs padded | , | `not measured on this hardware (no CUDA device; developed on Apple M4)` | needs the varlen kernel |
 
 ### 5.1 Where the causal result comes from
 
@@ -340,18 +340,18 @@ triangle. That gap *is* the value of block skipping, isolated.
   inner-KV loop order that `fa/ref/online_softmax.py` is written in.
 - **Shah et al. (2024)**, *FlashAttention-3*, warp specialisation, FP8, Hopper.
   Out of reach without an H100.
-- **Kwon et al. (2023)**, *PagedAttention/vLLM*, task 09's block-table design.
+- **Kwon et al. (2023)**, *PagedAttention/vLLM*, the block-table design for paged decoding.
 
 ## 8. What I would do differently
 
-**The task order was right, and I would defend it.** Building the harness (04) and
-the math (02) before the kernel (03) meant that when the kernel becomes possible
+**The order was right, and I would defend it.** Building the harness and the math
+before the kernel meant that when the kernel becomes possible
 there is a known-good oracle waiting. The alternative, kernel first, tests after
 produces tests that agree with whatever the kernel does.
 
 **I should have checked hardware feasibility before scoping.** The plan assumed a
-CUDA box throughout. Discovering at task 00 that 8 of 12 tasks were unrunnable
-should have happened before the specs were written, not after.
+CUDA box throughout. Discovering while fingerprinting the machine that most of the
+plan was unrunnable should have happened before the plan was written, not after.
 
 **I trusted `sdpa_kernel` without verifying it was honored.** It failed silently
 and plausibly. Four columns of the CSV would have carried "MATH backend" numbers
@@ -374,5 +374,5 @@ weaker form of knowing. The kernel engineering, shared-memory layout, bank
 conflicts, `cp.async` pipelining, register pressure, I have read about and not
 done, and I would not claim otherwise.
 
-The next thing to build is task 03 on rented hardware, against the 192 tests that
+The next thing to build is the Triton forward on rented hardware, against the 192 tests that
 are already written and waiting.

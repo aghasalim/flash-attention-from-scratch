@@ -1,1 +1,1 @@
-"""CUDA C++ extension sources. Empty until task 10."""
+"""CUDA C++ extension sources. Empty until the CUDA kernel lands."""

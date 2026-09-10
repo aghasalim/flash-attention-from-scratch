@@ -6,9 +6,9 @@ attention's own error vs. the same reference. An absolute threshold on fp16
 attention would have to be loose enough to pass a broken kernel at N=128 or tight
 enough to fail a correct one at N=4096, because the error grows with N.
 
-The `kernel` parameters are xfail: `fa/ops/attention.py` is task 03, and on the
+The `kernel` parameters are xfail: `fa/ops/attention.py` does not exist, and on the
 machine this suite was written on it can never run at all -- there is no CUDA
-device and Triton publishes no macOS wheel. `chunked` is task 01's tiled reference
+device and Triton publishes no macOS wheel. `chunked` is the tiled reference in `fa/ref/naive.py`
 and is the candidate that actually exercises the harness today; it skips until
 that file lands.
 
@@ -87,11 +87,11 @@ def test_correctness_batch_heads(impl, dtype, causal, b, h):
 @pytest.mark.parametrize("causal", [False, True], ids=["noncausal", "causal"])
 @pytest.mark.parametrize("dtype", [torch.float16], ids=["fp16"])
 def test_online_softmax_reference(dtype, causal, n, block):
-    """Task 02's NumPy tiled reference, held to the same bar as any kernel.
+    """The NumPy tiled reference, held to the same bar as any kernel.
 
-    `fa/ref/online_softmax.py::online_attention` is the algorithm task 03 ports
-    into Triton loop for loop, so it is worth checking here and not only in that
-    task's own self-test: neither block size divides either N, which is where a
+    `fa/ref/online_softmax.py::online_attention` is the algorithm the kernel
+    will port into Triton loop for loop, so it is worth checking here and not only in
+    that module's own self-test: neither block size divides either N, which is where a
     tiled softmax gets its boundary masking wrong.
 
     It takes a single (N, D) head, hence B=H=1, and fp16 only -- NumPy has no
@@ -99,7 +99,7 @@ def test_online_softmax_reference(dtype, causal, n, block):
     """
     online = external_online()
     if online is None:
-        pytest.skip("fa/ref/online_softmax.py not present yet (task 02)")
+        pytest.skip("fa/ref/online_softmax.py not present yet")
     block_m, block_n = block
     q, k, v, ref_fp64, naive = reference_bundle(1, 1, n, 64, dtype, causal)
     out = online(q[0, 0].numpy(), k[0, 0].numpy(), v[0, 0].numpy(), block_m, block_n, causal=causal)

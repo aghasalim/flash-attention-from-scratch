@@ -6,8 +6,8 @@ ported *from*, so the structure matters as much as the numbers:
   * `online_attention` has the exact loop nest the Triton kernel will have —
     outer loop over Q blocks (the grid axis), inner sequential loop over KV
     blocks, running `m_i` / `l_i` / `acc` carried across the inner loop.
-  * Accumulators are fp32 at minimum (repo rule 5). `acc_dtype=np.float16` is
-    exposed only so the experiments can measure how badly that rule bites.
+  * Accumulators are fp32 at minimum. `acc_dtype=np.float16` is exposed only so
+    the experiments can measure how badly dropping to fp16 bites.
   * Short trailing blocks are handled by *slicing*, never by zero-padding.
     A masked score must be -inf (contributes -inf to the max, exp(-inf)=0 to
     the sum). Zero-filling silently corrupts the max — see `_experiments`.
@@ -27,7 +27,7 @@ __all__ = ["online_softmax", "online_attention", "logsumexp_rows", "causal_zone"
 
 
 def _acc_dtype(x, acc_dtype):
-    """Rule 5: accumulators are fp32 at minimum; fp64 inputs keep fp64."""
+    """Accumulators are fp32 at minimum; fp64 inputs keep fp64."""
     if acc_dtype is not None:
         return np.dtype(acc_dtype)
     return np.promote_types(np.asarray(x).dtype, np.float32)
@@ -74,7 +74,7 @@ def causal_zone(q_start, q_end, kv_start, kv_end):
     """Which of the three causal zones a (Q block, KV block) pair falls in.
 
     Rows are [q_start, q_end), cols are [kv_start, kv_end), mask is col <= row.
-    Task 06 splits the kernel along exactly this classification, so it lives in
+    A kernel splits along exactly this classification, so it lives in
     one named place rather than inline in the loop.
 
       'skip'     — every col > every row: contributes nothing, do no work at all
@@ -97,7 +97,7 @@ def _attention_core(q, k, v, block_m, block_n, causal, sm_scale, acc_dtype):
         of K/V, and writes its own rows of O and L. No cross-program communication,
         no global sync — that is the whole point of the online recurrence.
     INNER loop over KV blocks -> stays a real sequential loop inside the kernel.
-        `m_i`, `l_i`, `acc` live in registers across it and are fp32 (rule 5).
+        `m_i`, `l_i`, `acc` live in registers across it and are fp32.
 
     Returns (O, L) with L = m + log(l), one fp32 per row.
     """

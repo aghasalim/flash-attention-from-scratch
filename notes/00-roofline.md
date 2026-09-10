@@ -8,7 +8,7 @@ with numbers, instead of taking it from the paper.
 below ran on an Apple M4, MPS (the Apple GPU) in fp16, or the CPU in fp32. Those
 are real measurements of real hardware, but they are *not* stand-ins for CUDA
 numbers, and nothing here should be read as a FlashAttention result. Every
-CUDA-specific quantity in the task spec is marked
+CUDA-specific quantity is marked
 `not measured on this hardware (no CUDA device; developed on Apple M4)`.
 
 Reproduce with:
@@ -51,8 +51,8 @@ is not free.
 Causal masking halves the score entries that need computing (the strict lower
 triangle plus the diagonal, `N(N+1)/2` of `N²`), so `FLOPs_fwd_causal ≈ 2·B·H·N²·D`.
 "≈" because the diagonal blocks are computed densely and then masked, the saving
-is real but is not exactly one half at finite block size. Task 06 measures what
-fraction is actually recovered.
+is real but is not exactly one half at finite block size. Measuring what fraction
+is actually recovered needs the causal kernel.
 
 **Backward.** With recomputation, five matmuls of the same shape:
 
@@ -68,7 +68,7 @@ fraction is actually recovered.
 FLOPs_bwd = 10 · B · H · N² · D   =   2.5 × forward
 ```
 
-That 2.5× is the analytic target task 05 has to land near. Outside roughly 2 to 4×
+That 2.5× is the analytic target the backward kernel has to land near. Outside roughly 2 to 4×
 of forward wall-clock, something is wrong.
 
 ## 2. Bytes, derived, and why the score matrix is the whole problem
@@ -182,7 +182,7 @@ where naive dies:
 | 4864 | ok | 30.52 GB |
 | **5120** | **OOM** |, (allocator reported 19.75 GiB allocated at failure) |
 
-The closed-form prediction in the task spec assumes two concurrent `N²` tensors
+The closed-form prediction assumes two concurrent `N²` tensors
 (`S` and `P`) against the memory budget. `torch.mps.recommended_max_memory()` is
 17.76 GiB, so:
 
@@ -244,7 +244,7 @@ prerequisite for it, not a substitute for it.
 
 ## 7. What could not be measured here
 
-Per rule 6, stated rather than estimated:
+Stated rather than estimated:
 
 - **Naive-vs-FlashAttention latency ratio at N=4096.** The task's headline number.
 `SDPBackend.FLASH_ATTENTION` on this machine is not the FlashAttention-2 CUDA
@@ -272,7 +272,7 @@ Per rule 6, stated rather than estimated:
   measure the dispatch path rather than the algorithm. CPU rows are fp32 and the
 `dtype` column says so.
 - **Backward pass.** Analytic only (§1). Not measured; there is no backward
-  implementation until task 05.
+  implementation yet.
 
 ## 8. Correctness
 

@@ -433,10 +433,10 @@ def oom_ladder(device: str, dtype: torch.dtype) -> list[Row]:
 def check_correctness() -> None:
     """naive and chunked must agree with sdpa(MATH), against an fp64 reference.
 
-    The bar is the repo's relative one (rule 2): each implementation's error against the
+    The bar is the repo's relative one: each implementation's error against the
     same fp64 reference must be no worse than naive-in-this-dtype's error. fp64 does not
     exist on MPS, so the reference is computed on the CPU in fp64.
-    ``fa/ref/fp64.py`` belongs to task 04; this is a private copy so task 01 stands alone.
+    ``fa/ref/fp64.py`` exists too; this is a private copy so this module stands alone.
     """
     print("=== correctness gate (fp64 reference, computed on CPU) ===")
     torch.manual_seed(0)
@@ -473,11 +473,11 @@ def check_correctness() -> None:
                 + f"  | vs naive bar: chunked {err['chunked'] / bar:.4f}x, sdpa {err['sdpa[MATH]'] / bar:.4f}x"
                 + ("" if honored else "  (sdpa backend selection not honored here)")
             )
-            # Rule 2's relative bar, in the form the flash-attention repo's own tests
+            # The relative bar, in the form the flash-attention repo's own tests
             # use: candidate error <= 2x the same-dtype naive baseline's error against
             # the same fp64 reference. The ratio is printed above, so the bar does not
             # have to be taken on faith -- on this machine chunked lands at ~1.00x, i.e.
-            # the two differ by a fraction of one fp16 ULP. tests/conftest.py (task 04)
+            # the two differ by a fraction of one fp16 ULP. tests/conftest.py
             # owns the final tolerance policy for the repo.
             for name in ("chunked", "sdpa[MATH]"):
                 assert err[name] <= 2 * bar, (

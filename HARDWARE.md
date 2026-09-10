@@ -93,7 +93,7 @@ they are not a stand-in for any CUDA measurement.
 |---|---|
 | ncu | not measured on this hardware (no CUDA device; developed on Apple M4) |
 | ncu_note | Nsight Compute is NVIDIA-only and is not installed here; `make profile` says so instead of pretending |
-| alternative | Metal System Trace / Xcode Instruments (not wired up by task 00) |
+| alternative | Metal System Trace / Xcode Instruments (not wired up here) |
 
 ## Platform
 
@@ -107,8 +107,8 @@ they are not a stand-in for any CUDA measurement.
 
 ## What this means for the rest of the project
 
-- No NVIDIA GPU here: no Triton (no macOS wheel), no CUDA C++, no `ncu`. Tasks 03
-  and 05-10 are written against CUDA and need a rented GPU before they can run.
+- No NVIDIA GPU here: no Triton (no macOS wheel), no CUDA C++, no `ncu`. The
+  kernels target CUDA and need a rented GPU before they can run.
 - `fp64` does not exist on MPS, so every fp64 reference in `fa/ref/` runs on the CPU.
 - Memory is unified: there is no host-to-device copy to hide, and CPU and GPU contend
   for the same bandwidth. A roofline drawn here is not a roofline for an A100.

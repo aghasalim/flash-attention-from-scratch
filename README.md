@@ -123,7 +123,7 @@ published quantity from the rawest form of it in the repository, by another
 route, and CI fails if any of them disagrees.
 
 ## 5. Method and structure
-The work is organised into waves, each one verifiable on its own before the next depends on it.
+The work is organised in stages, each one verifiable on its own before the next depends on it.
 
 `fa/ref/` holds the fp64 ground truth, the naive, chunked and backend-forced SDPA
 baselines, and the NumPy online-softmax reference written in the shape the Triton

@@ -9,7 +9,7 @@ output is exactly V's row, or the mean of V, or finite), not just agreement with
 reference -- a property assertion still means something when the reference and the
 candidate share a bug.
 
-`kernel` is xfail (task 03, and no CUDA device here); `naive` and `chunked` run.
+`kernel` is xfail (it does not exist, and no CUDA device here); `naive` and `chunked` run.
 """
 
 from __future__ import annotations

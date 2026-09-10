@@ -213,8 +213,8 @@ cols `[kv_start, kv_end)` with mask `col ≤ row`:
 | diagonal | otherwise | straddles the diagonal: element-level mask, the only zone that pays for it |
 
 Only `O(N/BLOCK)` blocks are diagonal, so masking cost is linear in the number of blocks while the
-dense zone is quadratic. The classification lives in `causal_zone()` in the reference so task 06
-can split the kernel along the same line.
+dense zone is quadratic. The classification lives in `causal_zone()` in the reference so the kernel
+can split along the same line.
 
 ---
 
@@ -270,7 +270,7 @@ reason the kernel needs `BLOCK_M`/`BLOCK_N` tuned per `d` rather than one config
 Everything in this section is an operation count, not a measurement. The actual speedup of a fused
 kernel over an unfused one on a real GPU is
 **not measured on this hardware (no CUDA device; developed on Apple M4)**: that number belongs to
-tasks 01 and 07, on a machine that has tensor cores.
+a benchmark on a machine that has tensor cores.
 
 ---
 
@@ -294,7 +294,7 @@ sizes that leave a short trailing block, makes no difference. That is the proof 
 showing up as a number. The module self-check asserts `< 1e-14` for block sizes 1, 7, 64, 128, 333,
 1000 and 4096 and reports `0.000e+00`.
 
-### (b) fp32 vs fp16 accumulators, why rule 5 exists
+### (b) fp32 vs fp16 accumulators, why the accumulator rule exists
 
 Input is fp16 in both arms, so the input quantisation error is identical and cancels out of the
 comparison; the reference is the fp64 softmax **of that same fp16 input**. The only difference
@@ -334,7 +334,7 @@ Reading the columns:
   error does not grow with `N` even while the accumulator gets steadily worse. If you only look at
   max-abs-error you will conclude fp16 accumulation is fine at long context. It is not.
 
-This is the experiment behind repo rule 5: **inputs may be fp16/bf16, but `acc`, `m_i`, `l_i` and `D`
+This is the experiment behind the repo's accumulator rule: **inputs may be fp16/bf16, but `acc`, `m_i`, `l_i` and `D`
 are fp32 always.** If a future kernel's error jumps by three to four orders of magnitude, an fp16
 accumulator is the first thing to check, a `tl.zeros(..., dtype=tl.float16)` or a missing
 `.to(tl.float32)` on the accumulator update.

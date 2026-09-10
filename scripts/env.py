@@ -35,7 +35,7 @@ import torch
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
-# AGENTS.md rule 6, verbatim. Any field that would need an NVIDIA GPU to fill in
+# Any field that would need an NVIDIA GPU to fill in
 # gets this string in the Markdown and `null` in the JSON -- never a guess, never
 # a number borrowed from the FlashAttention paper, never an MPS number wearing a
 # CUDA label.
@@ -55,7 +55,7 @@ BW_WARMUP = 10
 BW_RUNS = 20
 
 # Matmul throughput: square M=N=K, FLOPs = 2*M*N*K.
-MM_MAX_N = 8192  # what the task spec asks for; used wherever it fits the budget
+MM_MAX_N = 8192  # the largest square worth timing; used wherever it fits the budget
 MM_MIN_N = 1024
 MM_BUDGET_S = 1.5  # per-matmul wall-clock ceiling used to pick the size
 MM_WARMUP = 10
@@ -478,7 +478,7 @@ def apple_fingerprint() -> dict[str, Any]:
             "ncu": shutil.which("ncu"),
             "ncu_note": "Nsight Compute is NVIDIA-only and is not installed here; "
             "`make profile` says so instead of pretending",
-            "alternative": "Metal System Trace / Xcode Instruments (not wired up by task 00)",
+            "alternative": "Metal System Trace / Xcode Instruments (not wired up here)",
         },
         "platform": _platform_block(),
     }
@@ -497,7 +497,7 @@ def fingerprint() -> dict[str, Any]:
 
 
 def _val(v: Any) -> str:
-    """null means 'would need an NVIDIA GPU'. Say so in the words rule 6 demands."""
+    """null means 'would need an NVIDIA GPU'. Say so in the words used everywhere else."""
     return NOT_MEASURED if v is None else str(v)
 
 
@@ -701,8 +701,8 @@ def render_markdown(fp: dict[str, Any]) -> str:
             "",
             "## What this means for the rest of the project",
             "",
-            "- No NVIDIA GPU here: no Triton (no macOS wheel), no CUDA C++, no `ncu`. Tasks 03",
-            "  and 05-10 are written against CUDA and need a rented GPU before they can run.",
+            "- No NVIDIA GPU here: no Triton (no macOS wheel), no CUDA C++, no `ncu`. The",
+            "  kernels target CUDA and need a rented GPU before they can run.",
             "- `fp64` does not exist on MPS, so every fp64 reference in `fa/ref/` runs on the CPU.",
             "- Memory is unified: there is no host-to-device copy to hide, and CPU and GPU contend",
             "  for the same bandwidth. A roofline drawn here is not a roofline for an A100.",

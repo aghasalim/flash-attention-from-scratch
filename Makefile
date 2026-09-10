@@ -16,7 +16,7 @@ test:
 
 bench:
 	@if [ -z "$$(ls bench/*.py 2>/dev/null | grep -v __init__)" ]; then \
-		echo "no benchmarks yet -- bench/ is filled in by tasks 01 and 07"; \
+		echo "no benchmarks yet -- nothing in bench/ to run"; \
 	else \
 		for f in $$(ls bench/*.py | grep -v __init__); do \
 			echo "== $$f"; $(PY) "$$f" || exit 1; \

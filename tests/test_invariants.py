@@ -2,7 +2,7 @@
 
 These are the tests that make the harness trustworthy before a kernel exists: they
 need no ground truth at all, only an implementation and an identity it must
-satisfy. They run today against `fa/ref/fp64.py` and task 01's references, which
+satisfy. They run today against `fa/ref/fp64.py` and the references in `fa/ref/naive.py`, which
 is what proves the harness itself is right rather than merely self-consistent.
 
 Four identities:

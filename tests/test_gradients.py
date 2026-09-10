@@ -8,7 +8,8 @@ Two layers, on purpose:
   gradient is localised to one tensor before you start reading kernel code.
 
 The reference-side tests run today and must pass: they are what says the harness
-is right. The kernel-side ones are xfail until task 05 -- and on this machine they
+is right. The kernel-side ones are xfail until the backward kernel exists -- and on
+this machine they
 can never run at all (no CUDA device, no Triton wheel for macOS).
 
 gradcheck needs float64 leaves with requires_grad=True; run it on an fp32 or fp16
@@ -55,7 +56,7 @@ def test_gradcheck_reference(causal):
 @pytest.mark.parametrize("causal", [False, True], ids=["noncausal", "causal"])
 @pytest.mark.parametrize("impl", [KERNEL_PARAM])
 def test_gradcheck_kernel(impl, causal):
-    """Task 05. Kept here so the day the backward kernel lands, the test already exists."""
+    """Kept here so the day the backward kernel lands, the test already exists."""
     fn = resolve_impl(impl)
     q, k, v = leaves()
     assert torch.autograd.gradcheck(
@@ -119,7 +120,7 @@ def test_grad_no_worse_than_naive(impl, dtype, wrt, causal):
 
     With impl="naive" the candidate *is* the bar, so this only checks that the
     plumbing produces finite gradients of the right shape. It earns its keep when
-    task 05's backward kernel arrives; it is written now so that it cannot be
+    the backward kernel arrives; it is written now so that it cannot be
     written to match that kernel's bugs.
     """
     fn = resolve_impl(impl)
