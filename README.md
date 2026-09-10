@@ -101,7 +101,7 @@ pip install -e ".[dev]"
 
 ```bash
 python -m scripts.env          # hardware fingerprint -> HARDWARE.md, hardware.json
-python -m pytest tests/        # 297 passed, 38 skipped, 192 xfailed (~12 s)
+python -m pytest tests/        # 270 passed, 38 skipped, 192 xfailed (~11 s)
 python -m fa.ref.online_softmax  # exactness proof and the accumulator experiments
 python -m bench.fusion         # CPU fusion measurement -> results/fusion.csv (~5 min)
 python -m bench.roofline       # full sweep -> results/roofline.csv (~14 min)
@@ -128,7 +128,7 @@ The work is organised in stages, each one verifiable on its own before the next 
 `fa/ref/` holds the fp64 ground truth, the naive, chunked and backend-forced SDPA
 baselines, and the NumPy online-softmax reference written in the shape the Triton
 kernel will take; `fa/triton/` and `fa/cuda/` are empty and waiting on hardware. The
-suite is 527 tests, 192 of them xfail pending a GPU, and it was written against the
+suite is 500 tests, 192 of them xfail pending a GPU, and it was written against the
 references before any kernel existed, since a harness written afterwards tends to
 encode the kernel's own bugs as expected behaviour. Correctness is a relative bar
 rather than a fixed tolerance: a kernel's error against the fp64 reference must be no
@@ -187,20 +187,6 @@ Each paper is listed because the implementation follows it, not as background re
 - **Shah, Bikshandi, Zhang et al. FlashAttention-3: Fast and Accurate Attention with Asynchrony and Low-precision. NeurIPS 2024.** [arXiv:2407.08608](https://arxiv.org/abs/2407.08608) Hopper warp specialisation and FP8. Out of reach without that hardware, and not measured here.
 - **Kwon, Li, Zhuang et al. Efficient Memory Management for Large Language Model Serving with PagedAttention. SOSP 2023.** [arXiv:2309.06180](https://arxiv.org/abs/2309.06180) The block table design behind the paged cache task.
 
-## Author
-
-Aghasalim Mustafazada, third year AI student at Howest, Belgium.
-
-<p align="center">
-  <a href="https://github.com/aghasalim">
-    <img src="https://img.shields.io/badge/GitHub-181717?style=for-the-badge&logo=github&logoColor=white" alt="github"></a>
-  <a href="https://www.kaggle.com/aghasalimmustafazada">
-    <img src="https://img.shields.io/badge/Kaggle-20BEFF?style=for-the-badge&logo=kaggle&logoColor=white" alt="kaggle"></a>
-  <a href="https://linkedin.com/in/mustafazada">
-    <img src="https://img.shields.io/badge/LinkedIn-0A66C2?style=for-the-badge&logo=linkedin&logoColor=white" alt="linkedin"></a>
-  <a href="https://orcid.org/0009-0001-8746-4582">
-    <img src="https://img.shields.io/badge/ORCID-A6CE39?style=for-the-badge&logo=orcid&logoColor=white" alt="orcid"></a>
-</p>
 
 ## License
 

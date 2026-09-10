@@ -151,7 +151,7 @@ fa/ref/        fp64 ground truth; naive, chunked and backend-forced SDPA baselin
                key/value blocks, fp32 accumulators, causal split into three zones)
 fa/triton/     empty, waiting on hardware
 fa/cuda/       empty, waiting on hardware
-tests/         527 tests; 192 xfail pending a GPU
+tests/         500 tests; 192 xfail pending a GPU
 bench/         roofline sweep, CPU fusion measurement, and the figures
 notes/         derivations, the write-up, and the logbook
 results/       generated CSVs and figures, committed so the tables above reproduce
