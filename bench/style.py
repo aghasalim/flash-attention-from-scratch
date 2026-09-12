@@ -1,7 +1,8 @@
 """House plot style. Import before plotting, it works by side effect.
 
-One place to change how every figure in the repo looks, so the plots in the
-README read as one set rather than eight unrelated ones.
+This is the source copy. The other repositories in this portfolio vendor it
+so their figures read as one set. Edit here and copy it across, never the
+other way round.
 """
 from __future__ import annotations
 
