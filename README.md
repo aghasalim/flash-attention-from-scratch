@@ -6,16 +6,16 @@
 [![results](https://img.shields.io/badge/results-reproducible-1a9850.svg)](results/)
 
 A from-scratch implementation of IO-aware attention, built to check whether the
-standard claim about it, that attention is bound by memory bandwidth rather than
+standard claim about it, that attention is bound by memory bandwidth instead of
 arithmetic, actually holds on hardware I can measure.
 
-**Current state.** The mathematics, the reference implementations, the test suite
+Current state. The mathematics, the reference implementations, the test suite
 and the empirical analysis are complete and reproducible. The Triton and CUDA
 kernels are not written. Triton publishes no macOS wheel and this machine has no
-NVIDIA GPU, so six of the twelve planned tasks are blocked on hardware rather than
+NVIDIA GPU, so six of the twelve planned tasks are blocked on hardware, not
 on effort. I have not written kernels I cannot compile or test; the repository
 holds no unverified kernel code, and every quantity that could not be measured
-here says so explicitly rather than being estimated or taken from the literature.
+here says so explicitly instead of being estimated or taken from the literature.
 
 ---
 
@@ -57,12 +57,12 @@ exists at each step: grey blocks were computed and freed, white ones have not be
 touched. Every other figure on this page is measured data.*
 
 ## 2. What I found
-**Fusion is worth roughly 3× on this hardware, and it takes achieved throughput from 22% of the CPU's measured fp32 peak to roughly 67%.** This is the central result and it is measured rather than modelled.
+Fusion is worth roughly 3× on this hardware, and it takes achieved throughput from 22% of the CPU's measured fp32 peak to roughly 67%. This is the central result and it is measured instead of modelled.
 
 Tiling on its own buys nothing. Chunked attention runs at 0.56 to 0.59× naive on the
 GPU, and its arithmetic intensity is 29.47 against naive's 31.51, so looping over
 key blocks without fusing moves intensity the wrong way. The memory wall is a cliff
-rather than a slope: naive attention follows `N²` up to 2048, where it takes 174 ms,
+instead of a slope: naive attention follows `N²` up to 2048, where it takes 174 ms,
 and then takes 46.5 s at `N = 4096`, a 267× jump for 4× the work against a fitted
 `N²` trend of 679 ms, while chunked attention is 37.95× faster at that size and
 still runs at 16384. Causal masking pays only where blocks are skipped, 2.02× for
@@ -134,7 +134,7 @@ give while the kernel does not exist. The
 suite is 500 tests, 192 of them xfail pending a GPU, and it was written against the
 references before any kernel existed, since a harness written afterwards tends to
 encode the kernel's own bugs as expected behaviour. Correctness is a relative bar
-rather than a fixed tolerance: a kernel's error against the fp64 reference must be no
+instead of a fixed tolerance: a kernel's error against the fp64 reference must be no
 worse than twice the naive implementation's error against that same reference.
 
 Full detail in [notes/METHODS.md](notes/METHODS.md#5-method-and-structure).
@@ -156,7 +156,7 @@ It establishes that the mechanism is real and worth measuring; it is not a
 substitute for the kernel and should not be quoted as one.
 
 `sdpa_kernel` is a silent no-op on MPS. Forcing a backend there does nothing and
-raises no error; those rows are labelled `NOT HONORED` in the CSV rather than
+raises no error; those rows are labelled `NOT HONORED` in the CSV instead of
 reported as a MATH-backend measurement. On the CPU the same probe behaves correctly.
 
 The backward pass is derived on paper and never executed.
@@ -174,7 +174,7 @@ prediction lands 2.7% under the measured failure. I also expected tiling to be t
 win when it is 0.56×, and I trusted `sdpa_kernel` without checking it was honoured,
 which on MPS it is not.
 
-Two more were found by the checks in `verify/` rather than by me: the §1 traffic table
+Two more were found by the checks in `verify/`, not by me: the §1 traffic table
 counted half the score traffic it said it counted, and §2 called a measurement a
 trend prediction.
 
