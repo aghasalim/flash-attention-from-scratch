@@ -11,8 +11,8 @@ authors:
 repository-code: "https://github.com/aghasalim/flash-attention-from-scratch"
 url: "https://aghasalim.github.io/"
 license: MIT
-date-released: "2026-08-27"
-version: "1.0.0"
+date-released: "2026-09-28"
+version: "1.0.1"
 keywords:
   - attention
   - GPU kernels
