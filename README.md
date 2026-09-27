@@ -6,8 +6,7 @@
 [![results](https://img.shields.io/badge/results-reproducible-1a9850.svg)](results/)
 
 A from-scratch implementation of IO-aware attention, built to check whether the
-standard claim about it, that attention is bound by memory bandwidth instead of
-arithmetic, actually holds on hardware I can measure.
+standard claim about it, that attention is bound by memory bandwidth, not arithmetic, actually holds on hardware I can measure.
 
 Current state. The mathematics, the reference implementations, the test suite
 and the empirical analysis are complete and reproducible. The Triton and CUDA
@@ -15,7 +14,7 @@ kernels are not written. Triton publishes no macOS wheel and this machine has no
 NVIDIA GPU, so six of the twelve planned tasks are blocked on hardware, not
 on effort. I have not written kernels I cannot compile or test; the repository
 holds no unverified kernel code, and every quantity that could not be measured
-here says so explicitly instead of being estimated or taken from the literature.
+here says so explicitly.
 
 ---
 
@@ -57,12 +56,11 @@ exists at each step: grey blocks were computed and freed, white ones have not be
 touched. Every other figure on this page is measured data.*
 
 ## 2. What I found
-Fusion is worth roughly 3× on this hardware, and it takes achieved throughput from 22% of the CPU's measured fp32 peak to roughly 67%. This is the central result and it is measured instead of modelled.
+Fusion is worth roughly 3× on this hardware, and it takes achieved throughput from 22% of the CPU's measured fp32 peak to roughly 67%. This is the central result and it comes from a measurement.
 
 Tiling on its own buys nothing. Chunked attention runs at 0.56 to 0.59× naive on the
 GPU, and its arithmetic intensity is 29.47 against naive's 31.51, so looping over
-key blocks without fusing moves intensity the wrong way. The memory wall is a cliff
-instead of a slope: naive attention follows `N²` up to 2048, where it takes 174 ms,
+key blocks without fusing moves intensity the wrong way. The memory wall is a cliff: naive attention follows `N²` up to 2048, where it takes 174 ms,
 and then takes 46.5 s at `N = 4096`, a 267× jump for 4× the work against a fitted
 `N²` trend of 679 ms, while chunked attention is 37.95× faster at that size and
 still runs at 16384. Causal masking pays only where blocks are skipped, 2.02× for
@@ -86,8 +84,7 @@ Every number on this page comes off an Apple M4 with 10 GPU cores and 25.77 GB o
 unified memory: 95.86 GB/s copy bandwidth on MPS, 101.29 GB/s on the CPU, and matmul
 peaks of 2963.5 GFLOP/s fp16 on MPS and 1738.3 GFLOP/s fp32 on the CPU. There is no
 CUDA device and no macOS Triton wheel, so HBM bandwidth, tensor-core throughput, SM
-count, `cp.async`, FP8 and TMA are all recorded as not measured on this hardware
-instead of being filled in from a spec sheet. MPS has no float64 either, which is why
+count, `cp.async`, FP8 and TMA are all recorded as not measured on this hardware. MPS has no float64 either, which is why
 the fp64 reference runs on the CPU. Run-to-run spread on an identical matmul is wide
 enough to move a conclusion, so every figure here is a median reported with its range.
 
@@ -116,8 +113,7 @@ want of hardware, not for want of a test.
 `scripts/check_numbers.py` re-derives 34 quoted figures from `hardware.json` and
 `results/*.csv` and fails if the prose and the data disagree. It reads this file and
 the notes together, since the detail lives in `notes/METHODS.md` now. It runs in CI on
-every push, because prose goes stale when the underlying data is regenerated rather
-than when the prose is edited, which is precisely how the ridge-point error above
+every push, because prose goes stale when the data under it is regenerated and nobody touches the prose, which is precisely how the ridge-point error above
 survived for several hours. Independently of that, `verify/` recomputes every
 published quantity from the rawest form of it in the repository, by another
 route, and CI fails if any of them disagrees.
@@ -133,8 +129,7 @@ NVIDIA card on RunPod and runs the suite there with Triton installed. On an RTX
 give while the kernel does not exist. The
 suite is 500 tests, 192 of them xfail pending a GPU, and it was written against the
 references before any kernel existed, since a harness written afterwards tends to
-encode the kernel's own bugs as expected behaviour. Correctness is a relative bar
-instead of a fixed tolerance: a kernel's error against the fp64 reference must be no
+encode the kernel's own bugs as expected behaviour. Correctness is a relative bar: a kernel's error against the fp64 reference must be no
 worse than twice the naive implementation's error against that same reference.
 
 Full detail in [notes/METHODS.md](notes/METHODS.md#5-method-and-structure).
@@ -156,8 +151,7 @@ It establishes that the mechanism is real and worth measuring; it is not a
 substitute for the kernel and should not be quoted as one.
 
 `sdpa_kernel` is a silent no-op on MPS. Forcing a backend there does nothing and
-raises no error; those rows are labelled `NOT HONORED` in the CSV instead of
-reported as a MATH-backend measurement. On the CPU the same probe behaves correctly.
+raises no error; those rows are labelled `NOT HONORED` in the CSV so nobody reads them as MATH-backend measurements. On the CPU the same probe behaves correctly.
 
 The backward pass is derived on paper and never executed.
 
