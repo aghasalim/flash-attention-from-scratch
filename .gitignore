@@ -16,3 +16,6 @@ dist/
 
 # Build products of the verification checks in verify/.
 verify/*/target/
+
+# Written by make gpu on a rented NVIDIA box; commit it deliberately.
+results/gpu/

@@ -127,7 +127,10 @@ The work is organised in stages, each one verifiable on its own before the next 
 
 `fa/ref/` holds the fp64 ground truth, the naive, chunked and backend-forced SDPA
 baselines, and the NumPy online-softmax reference written in the shape the Triton
-kernel will take; `fa/triton/` and `fa/cuda/` are empty and waiting on hardware. The
+kernel will take; `fa/triton/` and `fa/cuda/` are empty. `make gpu` rents one
+NVIDIA card on RunPod and runs the suite there with Triton installed. On an RTX
+3090 it gives 270 passed, 38 skipped and 192 xfailed, which is what it should
+give while the kernel does not exist. The
 suite is 500 tests, 192 of them xfail pending a GPU, and it was written against the
 references before any kernel existed, since a harness written afterwards tends to
 encode the kernel's own bugs as expected behaviour. Correctness is a relative bar

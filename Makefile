@@ -1,7 +1,7 @@
 # Use the repo venv for everything. Override with `make PY=/some/other/python test`.
 PY ?= $(CURDIR)/.venv/bin/python
 
-.PHONY: setup env test bench profile lint fmt fmt-check check-numbers clean
+.PHONY: setup env test bench gpu profile lint fmt fmt-check check-numbers clean
 
 setup:
 	$(PY) -m pip install -e .
@@ -22,6 +22,11 @@ bench:
 			echo "== $$f"; $(PY) "$$f" || exit 1; \
 		done; \
 	fi
+
+# Rents one NVIDIA GPU on RunPod, runs the suite there with Triton and brings
+# results/gpu/ back. Needs runpodctl and a key; see scripts/runpod_gpu.sh.
+gpu:
+	scripts/runpod_gpu.sh
 
 profile:
 	@if command -v ncu >/dev/null 2>&1; then \
