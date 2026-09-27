@@ -11,8 +11,7 @@ standard claim about it, that attention is bound by memory bandwidth, not arithm
 Current state. The mathematics, the reference implementations, the test suite
 and the empirical analysis are complete and reproducible. The Triton and CUDA
 kernels are not written. Triton publishes no macOS wheel and this machine has no
-NVIDIA GPU, so six of the twelve planned tasks are blocked on hardware, not
-on effort. I have not written kernels I cannot compile or test; the repository
+NVIDIA GPU, so six of the twelve planned tasks are blocked on hardware. I have not written kernels I cannot compile or test; the repository
 holds no unverified kernel code, and every quantity that could not be measured
 here says so explicitly.
 
@@ -107,8 +106,7 @@ python scripts/check_numbers.py  # every figure above, re-derived from source da
 ```
 
 The 192 expected failures are the kernel tests. They are written and will run
-against a Triton implementation the day there is a GPU; they are marked `xfail` for
-want of hardware, not for want of a test.
+against a Triton implementation the day there is a GPU; they are marked `xfail` until there is hardware.
 
 `scripts/check_numbers.py` re-derives 34 quoted figures from `hardware.json` and
 `results/*.csv` and fails if the prose and the data disagree. It reads this file and
@@ -168,14 +166,14 @@ prediction lands 2.7% under the measured failure. I also expected tiling to be t
 win when it is 0.56×, and I trusted `sdpa_kernel` without checking it was honoured,
 which on MPS it is not.
 
-Two more were found by the checks in `verify/`, not by me: the §1 traffic table
+Two more were found by the checks in `verify/`: the §1 traffic table
 counted half the score traffic it said it counted, and §2 called a measurement a
 trend prediction.
 
 Full detail in [notes/METHODS.md](notes/METHODS.md#7-errors-worth-recording).
 ## 8. References
 
-Each paper is listed because the implementation follows it, not as background reading.
+Each paper is listed because the implementation follows it.
 
 - **Milakov, Gimelshein. Online normalizer calculation for softmax. 2018.** [arXiv:1805.02867](https://arxiv.org/abs/1805.02867) The two page result the whole construction rests on.
 - **Rabe, Staats. Self-attention Does Not Need O(n^2) Memory. 2021.** [arXiv:2112.05682](https://arxiv.org/abs/2112.05682) The memory result without the IO framing. `chunked_attention` here is essentially their construction, and section 2 measures why that is not sufficient on its own.
