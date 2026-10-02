@@ -51,7 +51,10 @@ class SdpaUnavailable(RuntimeError):
 
 
 def _causal_mask(n_q: int, n_k: int, device: torch.device, col_offset: int = 0) -> torch.Tensor:
-    """True where a query may *not* attend (strictly upper triangular, aligned right).
+    """True where a query may *not* attend (strictly upper triangular, aligned top-left).
+
+    Query ``i`` sees absolute key columns ``0..i``. This is not the bottom-right
+    alignment of ``fa.ref.fp64.causal_mask``; the two only agree when ``n_q == n_k``.
 
     ``col_offset`` is the absolute column index of the first key in this tile, so the
     same helper works for the full matrix and for a K/V chunk.
