@@ -19,7 +19,7 @@ bench:
 		echo "no benchmarks yet -- nothing in bench/ to run"; \
 	else \
 		for f in $$(ls bench/*.py | grep -v __init__); do \
-			echo "== $$f"; $(PY) "$$f" || exit 1; \
+			echo "== $$f"; $(PY) -m bench.$$(basename $$f .py) || exit 1; \
 		done; \
 	fi
 
