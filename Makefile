@@ -28,6 +28,8 @@ bench:
 gpu:
 	scripts/runpod_gpu.sh
 
+# bench/profile_target.py does not exist yet; it lands with the Triton kernel,
+# so on an NVIDIA box this target fails until then.
 profile:
 	@if command -v ncu >/dev/null 2>&1; then \
 		ncu --set full --target-processes all $(PY) -m bench.profile_target; \
