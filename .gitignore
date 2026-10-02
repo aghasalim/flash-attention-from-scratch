@@ -13,6 +13,8 @@ dist/
 # results/ is deliberately NOT ignored -- the benchmark CSVs are checked in
 # so the README tables stay reproducible.
 .ruff_cache/
+# mypy is in the [dev] extra and make clean already removes this.
+.mypy_cache/
 
 # Build products of the verification checks in verify/.
 verify/*/target/
