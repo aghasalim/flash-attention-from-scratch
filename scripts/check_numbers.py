@@ -102,6 +102,17 @@ def claims(hw, rows, fus):
                              ("speedup_max", "speedup high")):
                 val = float(sp[key])
                 out.append((f"fusion {lbl} N={n}", val, f"{val:.2f}", ["README.md", "notes/METHODS.md"]))
+    # The headline: fusion takes throughput from 22% of the CPU fp32 peak to
+    # roughly 67%. Each share is the mean over N=2048 and N=4096, where the
+    # speedup has stopped climbing (383 and 390 GFLOP/s eager, 1183 and 1141
+    # compiled, against a 1738 GFLOP/s peak).
+    cpu_peak = dt["fp32"]["cpu"]["matmul"]["gflop_s"]
+    for impl, lbl in (("naive-eager", "eager"), ("naive-compiled", "compiled")):
+        rates = [fusion(fus, impl, n, field="achieved_gflop_s") for n in (2048, 4096)]
+        if None not in rates:
+            share = 100 * sum(rates) / len(rates) / cpu_peak
+            out.append((f"{lbl} share of CPU fp32 peak", share, f"{share:.0f}%",
+                        ["README.md", "notes/METHODS.md"]))
     return [c for c in out if c[1] is not None]
 
 

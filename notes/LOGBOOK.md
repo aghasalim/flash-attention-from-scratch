@@ -101,3 +101,8 @@ line, so a point measured on a cool machine no longer looks impossible.
 **Tried:** reading what `make bench` actually runs.
 **Measured:** it looped over `ls bench/*.py`, so `figures.py` ran first and plotted the previous CSVs, then `fusion.py` and `roofline.py` overwrote them.
 **Concluded:** the order is now written out, roofline then fusion then figures, and `tests/test_makefile.py` checks it with `make -n`.
+
+## 2026-10-10, the headline percentages were not checked
+**Tried:** corrupting the 22% in the README's central result.
+**Measured:** `scripts/check_numbers.py` still passed, because it checked the fusion latencies and speedups but not the share of peak. Both shares now come from `results/fusion.csv` and `hardware.json`: mean of N=2048 and N=4096, eager 383 and 390 GFLOP/s, compiled 1183 and 1141, against 1738.3, which is 22% and 67%. With the README edited to 25% the check now fails.
+**Concluded:** the sentence the whole README leans on was the one sentence nothing checked. It is checked now.
