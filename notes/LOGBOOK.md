@@ -91,3 +91,8 @@ causal and non-causal rows. That is the roof estimate being conservative, not a 
 row bug: `hardware.json` records the fp16 matmul peak moving 1937 to 3793 GFLOP/s
 with thermal state. The figure now draws that spread as a band instead of a single
 line, so a point measured on a cool machine no longer looks impossible.
+
+## 2026-10-10, online softmax went NaN on a fully masked first block
+**Tried:** a row whose first block is all -inf through `online_softmax`.
+**Measured:** the whole row came out NaN, because the running max is still -inf after that block and exp(-inf - -inf) is NaN. Now the shift uses 0 while the max is -inf, and the row matches the exact softmax.
+**Concluded:** the docstring tells callers to mask with -inf, so the reference has to survive it. Covered by `test_online_softmax_first_block_fully_masked`.

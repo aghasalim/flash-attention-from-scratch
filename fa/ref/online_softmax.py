@@ -60,9 +60,13 @@ def online_softmax(x, block_size, acc_dtype=None):
         blk = flat[:, s : s + block_size].astype(acc)
         m_blk = blk.max(axis=1)
         m_new = np.maximum(m_i, m_blk)
-        corr = np.exp(m_i - m_new)[:, None]           # <= 1 always
+        # A row whose blocks so far are all -inf has m_new = -inf, and
+        # exp(-inf - -inf) is NaN. Shift by 0 instead: every exp is then
+        # exp(-inf) = 0, which is the right contribution from a fully masked block.
+        m_safe = np.where(np.isneginf(m_new), 0, m_new)
+        corr = np.exp(m_i - m_safe)[:, None]          # <= 1 always
         p[:, :s] *= corr                              # the O(N) rescale; O(d) in the kernel
-        p[:, s : s + block_size] = np.exp(blk - m_new[:, None])
+        p[:, s : s + block_size] = np.exp(blk - m_safe[:, None])
         l_i = l_i * corr[:, 0] + p[:, s : s + block_size].sum(axis=1)
         m_i = m_new
 

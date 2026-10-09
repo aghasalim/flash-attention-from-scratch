@@ -199,3 +199,21 @@ def test_prime_sequence_length(impl, dtype, causal, n):
     assert_no_worse_than_naive(
         out, attention_fp64(q, k, v, causal=causal), naive_attention(q, k, v, causal=causal)
     )
+
+
+def test_online_softmax_first_block_fully_masked():
+    """A row whose first block is all -inf must not go NaN.
+
+    The running max starts at -inf, so a fully masked first block leaves it at
+    -inf and exp(-inf - -inf) is NaN. The later finite block has to recover it.
+    """
+    import numpy as np
+
+    from fa.ref.online_softmax import online_softmax
+
+    x = np.array([[-np.inf, -np.inf, 1.0, 2.0, 3.0]], dtype=np.float32)
+    out = online_softmax(x, block_size=2)
+    e = np.exp(np.array([1.0, 2.0, 3.0]) - 3.0)
+    expected = np.concatenate([[0.0, 0.0], e / e.sum()])
+    assert np.isfinite(out).all()
+    np.testing.assert_allclose(out[0], expected, rtol=1e-6, atol=1e-7)
