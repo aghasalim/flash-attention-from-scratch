@@ -14,14 +14,12 @@ env:
 test:
 	$(PY) -m pytest
 
+# Explicit order, not `ls bench/*.py`: alphabetical puts figures.py first, so it
+# drew the old CSVs before fusion.py and roofline.py rewrote them.
 bench:
-	@if [ -z "$$(ls bench/*.py 2>/dev/null | grep -v __init__)" ]; then \
-		echo "no benchmarks yet -- nothing in bench/ to run"; \
-	else \
-		for f in $$(ls bench/*.py | grep -v __init__); do \
-			echo "== $$f"; $(PY) -m bench.$$(basename $$f .py) || exit 1; \
-		done; \
-	fi
+	$(PY) -m bench.roofline
+	$(PY) -m bench.fusion
+	$(PY) -m bench.figures
 
 # Rents one NVIDIA GPU on RunPod, runs the suite there with Triton and brings
 # results/gpu/ back. Needs runpodctl and a key; see scripts/runpod_gpu.sh.
