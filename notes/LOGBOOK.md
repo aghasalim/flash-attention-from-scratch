@@ -96,3 +96,8 @@ line, so a point measured on a cool machine no longer looks impossible.
 **Tried:** a row whose first block is all -inf through `online_softmax`.
 **Measured:** the whole row came out NaN, because the running max is still -inf after that block and exp(-inf - -inf) is NaN. Now the shift uses 0 while the max is -inf, and the row matches the exact softmax.
 **Concluded:** the docstring tells callers to mask with -inf, so the reference has to survive it. Covered by `test_online_softmax_first_block_fully_masked`.
+
+## 2026-10-10, make bench drew the figures before the data
+**Tried:** reading what `make bench` actually runs.
+**Measured:** it looped over `ls bench/*.py`, so `figures.py` ran first and plotted the previous CSVs, then `fusion.py` and `roofline.py` overwrote them.
+**Concluded:** the order is now written out, roofline then fusion then figures, and `tests/test_makefile.py` checks it with `make -n`.
