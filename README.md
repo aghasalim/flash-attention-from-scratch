@@ -1,3 +1,5 @@
+<p align="center"><img src="assets/banner.jpg" alt="Line drawing of a large matrix processed tile by tile, with memory blocks and a lightning bolt" width="100%"></p>
+
 # flash-attention-from-scratch
 
 [![ci](https://github.com/aghasalim/flash-attention-from-scratch/actions/workflows/ci.yml/badge.svg)](https://github.com/aghasalim/flash-attention-from-scratch/actions/workflows/ci.yml)
@@ -18,6 +20,22 @@ kernels I can't compile or test, so there's no unverified kernel code in here.
 Anything I couldn't measure is marked as not measured.
 
 ---
+
+<details>
+<summary>Contents</summary>
+
+- [1. The question](#1-the-question)
+- [2. What I found](#2-what-i-found)
+- [3. What is measured, and what is not](#3-what-is-measured-and-what-is-not)
+- [4. Reproducing](#4-reproducing)
+- [5. Method and structure](#5-method-and-structure)
+- [6. Limitations](#6-limitations)
+- [7. Errors worth recording](#7-errors-worth-recording)
+- [8. References](#8-references)
+- [Citation](#citation)
+- [License](#license)
+
+</details>
 
 ## 1. The question
 
@@ -189,6 +207,21 @@ I listed each paper because the implementation follows it.
 - **Shah, Bikshandi, Zhang et al. FlashAttention-3: Fast and Accurate Attention with Asynchrony and Low-precision. NeurIPS 2024.** [arXiv:2407.08608](https://arxiv.org/abs/2407.08608) Hopper warp specialisation and FP8. Out of reach without that hardware, and not measured here.
 - **Kwon, Li, Zhuang et al. Efficient Memory Management for Large Language Model Serving with PagedAttention. SOSP 2023.** [arXiv:2309.06180](https://arxiv.org/abs/2309.06180) The block table design behind the paged cache task.
 
+
+## Citation
+
+If you use this work, please cite it. The same record is in [`CITATION.cff`](CITATION.cff).
+
+```bibtex
+@software{mustafazada2026flashattentionfromscratc,
+  author  = {Mustafazada, Aghasalim},
+  title   = {Flash Attention from scratch: IO-aware attention, measured},
+  year    = {2026},
+  version = {1.0.1},
+  doi     = {10.5281/zenodo.23003627},
+  url     = {https://github.com/aghasalim/flash-attention-from-scratch}
+}
+```
 
 ## License
 
